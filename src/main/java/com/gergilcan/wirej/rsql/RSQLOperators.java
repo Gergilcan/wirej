@@ -1,4 +1,4 @@
-package com.gergilcan.wirej.rsqlParser;
+package com.gergilcan.wirej.rsql;
 
 public abstract class RSQLOperators {
   private RSQLOperators() {

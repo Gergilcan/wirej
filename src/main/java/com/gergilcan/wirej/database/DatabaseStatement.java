@@ -53,7 +53,7 @@ public class DatabaseStatement<T> {
       }
 
       originalQuery = new String(file.readAllBytes());
-      connection = connectionHandler.getGladstone2Connection();
+      connection = connectionHandler.getConnection();
       log.debug("Statement and connection created: executed in {}ms", System.currentTimeMillis() - startTime);
     }
   }

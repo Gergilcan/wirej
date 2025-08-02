@@ -1,4 +1,4 @@
-package com.gergilcan.wirej.rsqlParser;
+package com.gergilcan.wirej.rsql;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;

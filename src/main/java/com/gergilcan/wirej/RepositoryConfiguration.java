@@ -23,10 +23,10 @@ import com.gergilcan.wirej.annotations.QueryFile;
 import com.gergilcan.wirej.core.RequestFilters;
 import com.gergilcan.wirej.database.ConnectionHandler;
 import com.gergilcan.wirej.database.DatabaseStatement;
-import com.gergilcan.wirej.rsqlParser.RsqlParser;
+import com.gergilcan.wirej.rsql.RsqlParser;
 
 @Configuration(proxyBeanMethods = false)
-@ComponentScan("com.gergilcan.wirej")
+@Slf4j
 public class RepositoryConfiguration implements BeanDefinitionRegistryPostProcessor {
     @Override
     public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
@@ -59,10 +59,10 @@ public class RepositoryConfiguration implements BeanDefinitionRegistryPostProces
                 beanDefinition.setAttribute("factoryBeanObjectType", repositoryInterface);
 
                 registry.registerBeanDefinition(beanName, beanDefinition);
-                System.out.println(
+                logger.debug(
                         "Registered repository: " + beanName + " for interface: " + repositoryInterface.getName());
             } catch (ClassNotFoundException e) {
-                System.err.println("Could not load class: " + candidate.getBeanClassName());
+                logger.error("Could not load class: " + candidate.getBeanClassName(), e);
             }
         }
     }
@@ -89,7 +89,7 @@ public class RepositoryConfiguration implements BeanDefinitionRegistryPostProces
         public Object getObject() {
             return java.lang.reflect.Proxy.newProxyInstance(repositoryInterface.getClassLoader(),
                     new Class<?>[] { repositoryInterface },
-                    new GladstoneRepositoryInvocationHandler(connectionHandler, rsqlParser));
+                    new RepositoryInvocationHandler(connectionHandler, rsqlParser));
         }
 
         @Override
@@ -103,11 +103,11 @@ public class RepositoryConfiguration implements BeanDefinitionRegistryPostProces
         }
     }
 
-    public static class GladstoneRepositoryInvocationHandler implements InvocationHandler {
+    public static class RepositoryInvocationHandler implements InvocationHandler {
         private final ConnectionHandler connectionHandler;
         private final RsqlParser rsqlParser;
 
-        public GladstoneRepositoryInvocationHandler(ConnectionHandler connectionHandler, RsqlParser rsqlParser) {
+        public RepositoryInvocationHandler(ConnectionHandler connectionHandler, RsqlParser rsqlParser) {
             this.connectionHandler = connectionHandler;
             this.rsqlParser = rsqlParser;
         }
@@ -124,39 +124,39 @@ public class RepositoryConfiguration implements BeanDefinitionRegistryPostProces
             Integer pageNumber = getParameterValueFromName(method, args, "pageNumber");
             Integer pageSize = getParameterValueFromName(method, args, "pageSize");
 
-            var DatabaseStatement = new DatabaseStatement<>(fileName, filters, pageNumber, pageSize,
+            var databaseStatement = new DatabaseStatement<>(fileName, filters, pageNumber, pageSize,
                     returnType.isArray() ? returnType.getComponentType() : returnType, rsqlParser, connectionHandler);
 
             // Set parameters for the statement
-            setStatementParameters(method, args, DatabaseStatement, isBatch);
+            setStatementParameters(method, args, databaseStatement, isBatch);
 
             if (method.getName().startsWith("get")) {
-                return handleGetRequest(returnType, DatabaseStatement);
+                return handleGetRequest(returnType, databaseStatement);
             } else {
                 // Execute the statement and return the result if it's not a void method
                 if (!isBatch) {
-                    return method.getReturnType() == Void.TYPE ? DatabaseStatement.execute()
-                            : DatabaseStatement.getResult();
+                    return method.getReturnType() == Void.TYPE ? databaseStatement.execute()
+                            : databaseStatement.getResult();
                 }
-                return DatabaseStatement.executeBatch();
+                return databaseStatement.executeBatch();
             }
         }
 
-        private Object handleGetRequest(Class<?> returnType, DatabaseStatement<Object> DatabaseStatement)
+        private Object handleGetRequest(Class<?> returnType, DatabaseStatement<Object> databaseStatement)
                 throws SQLException {
             if (returnType.isArray()) {
-                return DatabaseStatement.getResultList();
+                return databaseStatement.getResultList();
             } else if (returnType == Long.class || returnType == Integer.class || returnType == Boolean.class) {
-                return DatabaseStatement.getSingleValue();
+                return databaseStatement.getSingleValue();
             }
-            return DatabaseStatement.getResult();
+            return databaseStatement.getResult();
         }
 
-        private void setStatementParameters(Method method, Object[] args, DatabaseStatement<Object> DatabaseStatement,
+        private void setStatementParameters(Method method, Object[] args, DatabaseStatement<Object> databaseStatement,
                 boolean isBatch) throws SQLException {
             if (!isBatch) {
                 // If its not a batch statement
-                setParameters(method, args, DatabaseStatement);
+                setParameters(method, args, databaseStatement);
             } else {
                 // If its a batch statement, we need to set the parameters
                 // we look for the parameters in the method that is an array so we know that
@@ -177,7 +177,7 @@ public class RepositoryConfiguration implements BeanDefinitionRegistryPostProces
             }
         }
 
-        private void setObjectFieldsToStatement(DatabaseStatement<Object> DatabaseStatement, Object item) {
+        private void setObjectFieldsToStatement(Object item) {
             var fields = item.getClass().getDeclaredFields();
             for (var field : fields) {
                 field.setAccessible(true);
@@ -201,38 +201,39 @@ public class RepositoryConfiguration implements BeanDefinitionRegistryPostProces
             }
         }
 
-        private void setParameters(Method method, Object[] args, DatabaseStatement<Object> DatabaseStatement) {
+        private void setParameters(Method method, Object[] args) {
             var methodParameters = method.getParameters();
-            if (args != null) {
-                for (int i = 0; i < args.length; i++) {
-                    // Skip filters as they are already set in the DatabaseStatement, filters,
-                    // pageSize, and pageNumber
-                    String paramName = method.getParameters()[i].getName();
-                    if (paramName.equals("filters") || paramName.equals("pageNumber") || paramName.equals("pageSize")) {
-                        // Skip filters, pageNumber, and pageSize as they are already set in the
-                        // DatabaseStatement
-                        continue;
-                    }
-                    if (args[i] != null && args[i].getClass() == method.getReturnType()) {
-                        // If the argument is of the same type as the return type, we set it as a
-                        // parameter
-                        setObjectFieldsToStatement(DatabaseStatement, args[i]);
-                    } else {
-                        // Otherwise, we set it as a parameter with the name of the parameter
-                        if (methodParameters[i].getAnnotation(JsonAlias.class) != null) {
-                            // If the field has a JsonAlias annotation, we use the first alias as the
-                            // parameter name
-                            String[] aliases = methodParameters[i].getAnnotation(JsonAlias.class).value();
-                            if (aliases.length > 0) {
-                                DatabaseStatement.setParameter(aliases[0], args[i]);
-                            }
-                        } else {
-                            paramName = methodParameters[i].getName().replaceAll("([a-z])([A-Z])", "$1_$2")
-                                    .toLowerCase();
-                            DatabaseStatement.setParameter(paramName, args[i]);
-                        }
-                    }
+            if (args == null) {
+                return;
+            }
+            for (int i = 0; i < args.length; i++) {
+                String paramName = methodParameters[i].getName();
+                if (shouldSkipParameter(paramName)) {
+                    continue;
                 }
+                if (isReturnTypeArgument(args[i], method)) {
+                    setObjectFieldsToStatement(DatabaseStatement, args[i]);
+                } else {
+                    setSingleParameter(methodParameters[i], args[i]);
+                }
+            }
+        }
+
+        private boolean shouldSkipParameter(String paramName) {
+            return paramName.equals("filters") || paramName.equals("pageNumber") || paramName.equals("pageSize");
+        }
+
+        private boolean isReturnTypeArgument(Object arg, Method method) {
+            return arg != null && arg.getClass() == method.getReturnType();
+        }
+
+        private void setSingleParameter(java.lang.reflect.Parameter parameter, Object arg) {
+            JsonAlias aliasAnnotation = parameter.getAnnotation(JsonAlias.class);
+            if (aliasAnnotation != null && aliasAnnotation.value().length > 0) {
+                DatabaseStatement.setParameter(aliasAnnotation.value()[0], arg);
+            } else {
+                String paramName = parameter.getName().replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
+                DatabaseStatement.setParameter(paramName, arg);
             }
         }
 

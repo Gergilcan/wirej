@@ -19,18 +19,9 @@ public class ConnectionHandler {
 
 	public ConnectionHandler(DataSource dataSource) {
 		this.dataSource = dataSource;
-		try (var stream = this.getClass().getClassLoader().getResourceAsStream("fixtures/cleanup.sql")) {
-			if (stream != null) {
-				cleanupQuery = new String(stream.readAllBytes());
-				// Get a connection but don't create statement yet - we'll do that on first use
-				// to avoid holding an idle connection and statement
-			}
-		} catch (IOException e) {
-			log.error("Failed to load cleanup SQL: {}", e.getMessage(), e);
-		}
 	}
 
-	public Connection getGladstone2Connection() throws SQLException {
+	public Connection getConnection() throws SQLException {
 		return dataSource.getConnection();
 	}
 
@@ -41,7 +32,7 @@ public class ConnectionHandler {
 
 		// Lazy initialization of connection and statement
 		if (connection == null || connection.isClosed()) {
-			connection = getGladstone2Connection();
+			connection = getConnection();
 			statement = connection.createStatement();
 		}
 
@@ -49,8 +40,8 @@ public class ConnectionHandler {
 		statement.execute(cleanupQuery);
 	}
 
-	private boolean isTestDatabase() {
-		return System.getenv("GLADSTONE2_DATABASE_URL").equals("postgres")
-				|| System.getenv("GLADSTONE2_DATABASE_URL").equals("localhost");
+	private boolean isTestDatabase(Connection connection) {
+		return connection.getMetaData().getDatabaseProductName().equals("postgres") ||
+				connection.getMetaData().getDatabaseProductName().equals("localhost");
 	}
 }

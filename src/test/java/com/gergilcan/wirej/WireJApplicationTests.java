@@ -8,6 +8,7 @@ class WireJApplicationTests {
 
 	@Test
 	void contextLoads() {
-	}
+   // This method is empty because we are only testing if the Spring application context loads successfully.
+ }
 
 }
