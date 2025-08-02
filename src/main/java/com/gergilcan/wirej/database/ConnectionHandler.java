@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -26,7 +25,7 @@ public class ConnectionHandler {
 	}
 
 	public void cleanup() throws SQLException {
-		if (!isTestDatabase()) {
+		if (!isTestDatabase(connection)) {
 			return;
 		}
 
@@ -40,7 +39,7 @@ public class ConnectionHandler {
 		statement.execute(cleanupQuery);
 	}
 
-	private boolean isTestDatabase(Connection connection) {
+	private boolean isTestDatabase(Connection connection) throws SQLException {
 		return connection.getMetaData().getDatabaseProductName().equals("postgres") ||
 				connection.getMetaData().getDatabaseProductName().equals("localhost");
 	}

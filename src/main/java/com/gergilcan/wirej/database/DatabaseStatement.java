@@ -13,7 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.gergilcan.wirej.core.RequestFilters;
-import com.gergilcan.wirej.rsqlParser.RsqlParser;
+import com.gergilcan.wirej.rsql.RsqlParser;
 
 import io.github.gergilcan.PostgreSQLmapper.core.PostgresEntityMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -118,8 +118,7 @@ public class DatabaseStatement<T> {
       var rs = statement.executeQuery();
       log.debug("Execute query: executed in " + (System.currentTimeMillis() - start) + "ms");
       start = System.currentTimeMillis();
-      var results = (T[]) entityMapper.map(rs, entityClass.arrayType());
-      return results.length > 0 ? results[0] : null;
+      return (T[]) entityMapper.map(rs, entityClass.arrayType());
     } finally {
       close();
     }
