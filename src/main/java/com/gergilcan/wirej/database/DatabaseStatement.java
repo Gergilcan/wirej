@@ -98,8 +98,8 @@ public class DatabaseStatement<T> {
     try (var statement = connection.prepareStatement(finalQuery)) {
       setStatementParameters(statement);
       var rs = statement.executeQuery();
-      // var results = (T[]) entityMapper.map(rs, entityClass.arrayType());
-      return null;
+      var results = (T[]) entityMapper.map(rs, entityClass.arrayType());
+      return results.length > 0 ? results[0] : null;
     } finally {
       close();
     }
@@ -118,7 +118,8 @@ public class DatabaseStatement<T> {
       var rs = statement.executeQuery();
       log.debug("Execute query: executed in " + (System.currentTimeMillis() - start) + "ms");
       start = System.currentTimeMillis();
-      return null;
+      var results = (T[]) entityMapper.map(rs, entityClass.arrayType());
+      return results.length > 0 ? results[0] : null;
     } finally {
       close();
     }
@@ -154,9 +155,7 @@ public class DatabaseStatement<T> {
         log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
         batchStatement.executeBatch();
         if (entityClass != null && entityClass != Void.TYPE) {
-          // return (T[]) entityMapper.map(batchStatement.getGeneratedKeys(),
-          // entityClass.arrayType());
-          return null;
+          return (T[]) entityMapper.map(batchStatement.getGeneratedKeys(), entityClass.arrayType());
         }
       }
     } finally {
