@@ -1,4 +1,4 @@
-package com.gergilcan.wirej.rsql;
+package io.github.gergilcan.wirej.rsql;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
-import com.gergilcan.wirej.database.DatabaseStatement;
+
+import io.github.gergilcan.wirej.database.DatabaseStatement;
 
 @Component
 public class RsqlParser {

@@ -1,4 +1,4 @@
-package com.gergilcan.wirej.database;
+package io.github.gergilcan.wirej.database;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -25,14 +25,14 @@ public class ConnectionHandler {
 	}
 
 	public void cleanup() throws SQLException {
-		if (!isTestDatabase(connection)) {
-			return;
-		}
-
 		// Lazy initialization of connection and statement
 		if (connection == null || connection.isClosed()) {
 			connection = getConnection();
 			statement = connection.createStatement();
+		}
+
+		if (!isTestDatabase(connection)) {
+			return;
 		}
 
 		// Execute cleanup

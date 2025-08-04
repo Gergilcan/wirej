@@ -1,4 +1,4 @@
-package com.gergilcan.wirej.database;
+package io.github.gergilcan.wirej.database;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
@@ -12,10 +12,9 @@ import java.util.LinkedList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.gergilcan.wirej.core.RequestFilters;
-import com.gergilcan.wirej.rsql.RsqlParser;
-
 import io.github.gergilcan.PostgreSQLmapper.core.PostgresEntityMapper;
+import io.github.gergilcan.wirej.core.RequestFilters;
+import io.github.gergilcan.wirej.rsql.RsqlParser;
 import lombok.extern.slf4j.Slf4j;
 
 // nosemgrep
@@ -45,6 +44,7 @@ public class DatabaseStatement<T> {
       throws IOException, SQLException {
     this.fileName = fileName;
     this.entityClass = entityClass;
+
     try (var file = getClass().getResourceAsStream(fileName)) {
       startTime = System.currentTimeMillis();
 

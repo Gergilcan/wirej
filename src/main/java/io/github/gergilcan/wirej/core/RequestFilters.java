@@ -1,4 +1,4 @@
-package com.gergilcan.wirej.core;
+package io.github.gergilcan.wirej.core;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

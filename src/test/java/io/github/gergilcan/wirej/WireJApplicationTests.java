@@ -1,4 +1,4 @@
-package com.gergilcan.wirej;
+package io.github.gergilcan.wirej;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -8,7 +8,8 @@ class WireJApplicationTests {
 
 	@Test
 	void contextLoads() {
-   // This method is empty because we are only testing if the Spring application context loads successfully.
- }
+		// This method is empty because we are only testing if the Spring application
+		// context loads successfully.
+	}
 
 }

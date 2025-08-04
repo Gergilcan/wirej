@@ -1,4 +1,4 @@
-package com.gergilcan.wirej.resolvers;
+package io.github.gergilcan.wirej.resolvers;
 
 import java.util.Set;
 
@@ -14,9 +14,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.stereotype.Repository;
 
-import com.gergilcan.wirej.database.ConnectionHandler;
-import com.gergilcan.wirej.rsql.RsqlParser;
-
+import io.github.gergilcan.wirej.database.ConnectionHandler;
+import io.github.gergilcan.wirej.rsql.RsqlParser;
 import lombok.extern.slf4j.Slf4j;
 
 @Configuration(proxyBeanMethods = false)
@@ -34,7 +33,7 @@ public class RepositoryConfiguration implements BeanDefinitionRegistryPostProces
         };
         scanner.addIncludeFilter(new AnnotationTypeFilter(Repository.class));
 
-        Set<BeanDefinition> candidates = scanner.findCandidateComponents("com.gergilcan.wirej");
+        Set<BeanDefinition> candidates = scanner.findCandidateComponents("io.github.gergilcan.wirej");
 
         for (BeanDefinition candidate : candidates) {
             try {

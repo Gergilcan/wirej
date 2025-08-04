@@ -1,4 +1,4 @@
-package com.gergilcan.wirej;
+package io.github.gergilcan.wirej;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

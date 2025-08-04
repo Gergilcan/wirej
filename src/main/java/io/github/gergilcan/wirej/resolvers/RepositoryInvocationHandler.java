@@ -1,15 +1,16 @@
-package com.gergilcan.wirej.resolvers;
+package io.github.gergilcan.wirej.resolvers;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.sql.SQLException;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
-import com.gergilcan.wirej.annotations.QueryFile;
-import com.gergilcan.wirej.core.RequestFilters;
-import com.gergilcan.wirej.database.ConnectionHandler;
-import com.gergilcan.wirej.database.DatabaseStatement;
-import com.gergilcan.wirej.rsql.RsqlParser;
+
+import io.github.gergilcan.wirej.annotations.QueryFile;
+import io.github.gergilcan.wirej.core.RequestFilters;
+import io.github.gergilcan.wirej.database.ConnectionHandler;
+import io.github.gergilcan.wirej.database.DatabaseStatement;
+import io.github.gergilcan.wirej.rsql.RsqlParser;
 
 public class RepositoryInvocationHandler implements InvocationHandler {
     private final ConnectionHandler connectionHandler;
@@ -38,16 +39,19 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         // Set parameters for the statement
         setStatementParameters(method, args, databaseStatement, isBatch);
 
-        if (method.getName().startsWith("get")) {
-            return handleGetRequest(returnType, databaseStatement);
+        Object result = null;
+        if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
+            result = handleGetRequest(returnType, databaseStatement);
         } else {
             // Execute the statement and return the result if it's not a void method
             if (!isBatch) {
-                return method.getReturnType() == Void.TYPE ? databaseStatement.execute()
+                result = method.getReturnType() == Void.TYPE ? databaseStatement.execute()
                         : databaseStatement.getResult();
+            } else {
+                result = databaseStatement.executeBatch();
             }
-            return databaseStatement.executeBatch();
         }
+        return result;
     }
 
     private Object handleGetRequest(Class<?> returnType, DatabaseStatement<Object> databaseStatement)
@@ -119,7 +123,8 @@ public class RepositoryInvocationHandler implements InvocationHandler {
             if (shouldSkipParameter(paramName)) {
                 continue;
             }
-            if (isReturnTypeArgument(args[i], method)) {
+
+            if (isParameterAClass(args[i])) {
                 setObjectFieldsToStatement(args[i], databaseStatement);
             } else {
                 setSingleParameter(methodParameters[i], args[i], databaseStatement);
@@ -131,8 +136,19 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         return paramName.equals("filters") || paramName.equals("pageNumber") || paramName.equals("pageSize");
     }
 
-    private boolean isReturnTypeArgument(Object arg, Method method) {
-        return arg != null && arg.getClass() == method.getReturnType();
+    private boolean isParameterAClass(Object arg) {
+        // Exclude also the Boolean, Integer, Long, and primitive types
+        if (arg == null || arg.getClass().isPrimitive() || arg instanceof String ||
+                arg instanceof Boolean || arg instanceof Integer || arg instanceof Long) {
+            return false;
+        }
+        // Check if the argument is a class type and not an array of primitives or
+        // arrays
+        if (arg.getClass().isArray() && arg.getClass().getComponentType().isPrimitive()) {
+            return false;
+        }
+
+        return true;
     }
 
     private void setSingleParameter(java.lang.reflect.Parameter parameter, Object arg,
