@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.gergilcan</groupId>
+        <artifactId>wirej-parent</artifactId>
+        <version>0.0.2</version>
+    </parent>
+
+    <!-- The artifactId must match the module name in the parent POM -->
+    <artifactId>wirej-processor</artifactId>
+    <name>WireJ Annotation Processor</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.google.auto.service</groupId>
+            <artifactId>auto-service-annotations</artifactId>
+            <version>1.1.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.auto.service</groupId>
+            <artifactId>auto-service</artifactId>
+            <version>1.1.1</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Corrected dependency on the annotations module -->
+        <dependency>
+            <groupId>io.github.gergilcan</groupId>
+            <artifactId>wirej-annotations</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+</project>
