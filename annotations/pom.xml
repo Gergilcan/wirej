@@ -7,11 +7,11 @@
     <parent>
         <groupId>io.github.gergilcan</groupId>
         <artifactId>wirej-parent</artifactId>
-        <version>0.0.2</version>
+        <version>0.0.3</version>
     </parent>
 
-    <!-- The artifactId must match the module name in the parent POM -->
     <artifactId>wirej-annotations</artifactId>
     <name>WireJ Annotations</name>
+    <description>Core annotations for the WireJ framework - provides @ServiceMethod, @QueryFile, and @ServiceClass annotations</description>
 
 </project>
