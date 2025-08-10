@@ -12,7 +12,4 @@ public interface UserRepository {
 
     @QueryFile("/queries/User/create.sql")
     void create(User newUser);
-
-    @QueryFile("/queries/User/findByEmail.sql") // This file doesn't exist - should trigger validation error
-    User findByEmail(String email);
 }
