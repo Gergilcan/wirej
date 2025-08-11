@@ -36,27 +36,28 @@ public class ControllerConfiguration implements BeanDefinitionRegistryPostProces
                 if (!beanDefinition.getMetadata().hasAnnotation(RestController.class.getName())) {
                     return false;
                 }
-                
+
                 // Try multiple ways to detect @ServiceClass annotation
                 try {
                     Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
-                    
+
                     // Check all available annotations
-                    log.debug("Available annotations on {}: {}", clazz.getName(), 
-                        java.util.Arrays.toString(clazz.getAnnotations()));
-                    log.debug("Available declared annotations on {}: {}", clazz.getName(), 
-                        java.util.Arrays.toString(clazz.getDeclaredAnnotations()));
-                        
+                    log.debug("Available annotations on {}: {}", clazz.getName(),
+                            java.util.Arrays.toString(clazz.getAnnotations()));
+                    log.debug("Available declared annotations on {}: {}", clazz.getName(),
+                            java.util.Arrays.toString(clazz.getDeclaredAnnotations()));
+
                     // Check annotation names
                     boolean hasServiceClass = java.util.Arrays.stream(clazz.getDeclaredAnnotations())
-                        .anyMatch(ann -> ann.annotationType().getSimpleName().equals("ServiceClass"));
-                    
-                    log.debug("Checking candidate: {} - Interface: {}, RestController: {}, ServiceClass: {} (direct check)", 
-                        beanDefinition.getBeanClassName(), 
-                        beanDefinition.getMetadata().isInterface(),
-                        beanDefinition.getMetadata().hasAnnotation(RestController.class.getName()),
-                        hasServiceClass);
-                        
+                            .anyMatch(ann -> ann instanceof io.github.gergilcan.wirej.annotations.ServiceClass);
+
+                    log.debug(
+                            "Checking candidate: {} - Interface: {}, RestController: {}, ServiceClass: {} (direct check)",
+                            beanDefinition.getBeanClassName(),
+                            beanDefinition.getMetadata().isInterface(),
+                            beanDefinition.getMetadata().hasAnnotation(RestController.class.getName()),
+                            hasServiceClass);
+
                     return hasServiceClass;
                 } catch (ClassNotFoundException e) {
                     log.warn("Could not load class for annotation check: {}", beanDefinition.getBeanClassName());
@@ -64,10 +65,10 @@ public class ControllerConfiguration implements BeanDefinitionRegistryPostProces
                 }
             }
         };
-        
+
         // Only add RestController filter since we need both annotations
         scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
-        
+
         Set<BeanDefinition> candidates = scanner.findCandidateComponents("io.github.gergilcan.wirej");
         log.info("Found {} controller candidates", candidates.size());
         for (BeanDefinition candidate : candidates) {
