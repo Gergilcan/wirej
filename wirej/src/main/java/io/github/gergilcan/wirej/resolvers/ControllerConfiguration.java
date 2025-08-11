@@ -28,12 +28,16 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ControllerConfiguration implements BeanDefinitionRegistryPostProcessor {
 
-    private static final String[] DEFAULT_SCAN_PACKAGES = { "com", "org", "net", "app", "application" };
+    private static final String[] DEFAULT_SCAN_PACKAGES = { "com", "org", "net", "io", "app", "application" };
 
     private final WireJConfiguration wireJConfig;
 
+    public ControllerConfiguration() {
+        this.wireJConfig = new WireJConfiguration();
+    }
+
     public ControllerConfiguration(WireJConfiguration wireJConfig) {
-        this.wireJConfig = wireJConfig;
+        this.wireJConfig = wireJConfig != null ? wireJConfig : new WireJConfiguration();
     }
 
     /**
@@ -153,17 +157,10 @@ public class ControllerConfiguration implements BeanDefinitionRegistryPostProces
 
         Set<BeanDefinition> candidates = new java.util.HashSet<>();
         for (String packageToScan : packagesToScan) {
-            // Skip scanning the library's own packages to avoid conflicts
-            if (packageToScan.startsWith("io.github.gergilcan.wirej")) {
-                log.debug("Skipping library package: {}", packageToScan);
-                continue;
-            }
-
             Set<BeanDefinition> packageCandidates = scanner.findCandidateComponents(packageToScan);
             candidates.addAll(packageCandidates);
             log.debug("Found {} candidates in package: {}", packageCandidates.size(), packageToScan);
         }
-
         log.info("Found {} total controller candidates across all packages", candidates.size());
         for (BeanDefinition candidate : candidates) {
             try {

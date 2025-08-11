@@ -1,14 +1,12 @@
 package io.github.gergilcan.wirej.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
 
 /**
  * Configuration properties for WireJ library.
  * This allows applications to configure WireJ behavior through
  * application.properties or application.yml.
  */
-@Configuration
 @ConfigurationProperties(prefix = "wirej")
 public class WireJConfiguration {
 
