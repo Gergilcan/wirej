@@ -27,8 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(WireJConfiguration.class)
 @Slf4j
-public class ControllerConfiguration implements BeanDefinitionRegistryPostProcessor, ApplicationContextAware {
-    private ApplicationContext applicationContext;
+public class ControllerConfiguration implements BeanDefinitionRegistryPostProcessor {
 
     @Override
     public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
@@ -162,10 +161,5 @@ public class ControllerConfiguration implements BeanDefinitionRegistryPostProces
         public boolean isSingleton() {
             return true;
         }
-    }
-
-    @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        this.applicationContext = applicationContext;
     }
 }
