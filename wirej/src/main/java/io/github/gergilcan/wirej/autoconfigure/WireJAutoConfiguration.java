@@ -13,10 +13,11 @@ import io.github.gergilcan.wirej.resolvers.RepositoryConfiguration;
  * when the library is added to the classpath.
  */
 @AutoConfiguration
-@ConditionalOnClass({RepositoryConfiguration.class, ControllerConfiguration.class})
-@Import({RepositoryConfiguration.class, ControllerConfiguration.class})
+@ConditionalOnClass({ RepositoryConfiguration.class, ControllerConfiguration.class })
+@Import({ RepositoryConfiguration.class, ControllerConfiguration.class })
 public class WireJAutoConfiguration {
-    
+
     // This class serves as the entry point for auto-configuration
-    // The actual configuration is done by importing the existing configuration classes
+    // The actual configuration is done by importing the existing configuration
+    // classes
 }

@@ -10,7 +10,7 @@ With WireJ's auto-configuration, you can get started with minimal setup!
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej</artifactId>
-    <version>0.0.3.1</version>
+    <version>0.0.3.2</version>
 </dependency>
 ```
 
