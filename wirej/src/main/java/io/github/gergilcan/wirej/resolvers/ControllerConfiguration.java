@@ -1,6 +1,7 @@
 package io.github.gergilcan.wirej.resolvers;
 
 import java.util.Set;
+import java.util.Arrays;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.FactoryBean;
@@ -9,6 +10,8 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
@@ -17,11 +20,86 @@ import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.github.gergilcan.wirej.annotations.ServiceClass;
+import io.github.gergilcan.wirej.config.WireJConfiguration;
 import lombok.extern.slf4j.Slf4j;
 
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(WireJConfiguration.class)
 @Slf4j
 public class ControllerConfiguration implements BeanDefinitionRegistryPostProcessor {
+
+    private static final String[] DEFAULT_SCAN_PACKAGES = { "com", "org", "net", "app", "application" };
+
+    private final WireJConfiguration wireJConfig;
+
+    public ControllerConfiguration(WireJConfiguration wireJConfig) {
+        this.wireJConfig = wireJConfig;
+    }
+
+    /**
+     * Detects the main application package by finding the class
+     * with @SpringBootApplication
+     * or falls back to scanning common base packages
+     */
+    private String[] detectApplicationPackages() {
+        try {
+            // First priority: Use explicitly configured packages
+            if (wireJConfig.getScanPackages() != null && wireJConfig.getScanPackages().length > 0) {
+                log.info("Using explicitly configured scan packages: {}",
+                        Arrays.toString(wireJConfig.getScanPackages()));
+                return wireJConfig.getScanPackages();
+            }
+
+            // Skip auto-detection if disabled
+            if (!wireJConfig.isAutoDetectPackages()) {
+                log.warn("Auto-detection disabled but no scan packages configured, using fallback packages");
+                return DEFAULT_SCAN_PACKAGES;
+            }
+
+            // Second priority: System property for backward compatibility
+            String configuredPackage = System.getProperty("wirej.scan.packages");
+            if (configuredPackage != null && !configuredPackage.trim().isEmpty()) {
+                String[] packages = configuredPackage.split(",");
+                for (int i = 0; i < packages.length; i++) {
+                    packages[i] = packages[i].trim();
+                }
+                log.info("Using system property scan packages: {}", Arrays.toString(packages));
+                return packages;
+            }
+
+            // Third priority: Try to find Spring Boot main application class
+            String mainClass = System.getProperty("sun.java.command");
+            if (mainClass != null && !mainClass.isEmpty()) {
+                // Extract just the class name, ignore arguments
+                String className = mainClass.split(" ")[0];
+                String packageName = getApplicationPackageFromClass(className);
+                if (packageName != null) {
+                    log.info("Detected application package from main class: {}", packageName);
+                    return new String[] { packageName };
+                }
+            }
+
+            // Fallback: Use common base packages but exclude the library package
+            log.warn("Could not detect specific application package, using broad scan (excluding library packages)");
+            return DEFAULT_SCAN_PACKAGES;
+
+        } catch (Exception e) {
+            log.warn("Error detecting application packages, using fallback", e);
+            return DEFAULT_SCAN_PACKAGES;
+        }
+    }
+
+    private String getApplicationPackageFromClass(String className) {
+        try {
+            Class<?> clazz = Class.forName(className);
+            if (clazz.isAnnotationPresent(org.springframework.boot.autoconfigure.SpringBootApplication.class)) {
+                return clazz.getPackage().getName();
+            }
+        } catch (ClassNotFoundException e) {
+            log.debug("Could not load main class: {}", className);
+        }
+        return null;
+    }
 
     @Override
     public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
@@ -69,8 +147,24 @@ public class ControllerConfiguration implements BeanDefinitionRegistryPostProces
         // Only add RestController filter since we need both annotations
         scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
 
-        Set<BeanDefinition> candidates = scanner.findCandidateComponents("io.github.gergilcan.wirej");
-        log.info("Found {} controller candidates", candidates.size());
+        // Detect application packages dynamically
+        String[] packagesToScan = detectApplicationPackages();
+        log.info("Scanning packages for WireJ controllers: {}", Arrays.toString(packagesToScan));
+
+        Set<BeanDefinition> candidates = new java.util.HashSet<>();
+        for (String packageToScan : packagesToScan) {
+            // Skip scanning the library's own packages to avoid conflicts
+            if (packageToScan.startsWith("io.github.gergilcan.wirej")) {
+                log.debug("Skipping library package: {}", packageToScan);
+                continue;
+            }
+
+            Set<BeanDefinition> packageCandidates = scanner.findCandidateComponents(packageToScan);
+            candidates.addAll(packageCandidates);
+            log.debug("Found {} candidates in package: {}", packageCandidates.size(), packageToScan);
+        }
+
+        log.info("Found {} total controller candidates across all packages", candidates.size());
         for (BeanDefinition candidate : candidates) {
             try {
 
