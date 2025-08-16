@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
@@ -43,6 +45,7 @@ import io.github.gergilcan.wirej.annotations.ServiceClass;
 public class ProxyControllerAutoConfiguration
         implements ApplicationListener<ContextRefreshedEvent>, ApplicationContextAware {
 
+    private static final Logger log = LoggerFactory.getLogger(ProxyControllerAutoConfiguration.class);
     private ApplicationContext applicationContext;
 
     @Override
@@ -51,7 +54,7 @@ public class ProxyControllerAutoConfiguration
     }
 
     /**
-     * This is the FIX for the 404 error.
+     * This is the FIX for the 404 and Ambiguous Mapping errors.
      * This method is called when the application context is fully initialized.
      * We find our proxy controllers and manually register their request mappings.
      */
@@ -63,29 +66,55 @@ public class ProxyControllerAutoConfiguration
         // Find all beans that were created from interfaces annotated with @ServiceClass
         Map<String, Object> proxyControllers = applicationContext.getBeansWithAnnotation(ServiceClass.class);
 
+        log.info("Found {} proxy controllers to register.", proxyControllers.size());
+
         proxyControllers.forEach((beanName, beanInstance) -> {
             // The bean is a JDK Proxy. We need to find the original interface.
             Class<?> userFacingInterface = ClassUtils.getUserClass(beanInstance);
+            log.debug("Processing proxy controller: {}", userFacingInterface.getName());
+
+            // Get the class-level @RequestMapping to use as a path prefix
+            RequestMapping typeRequestMapping = AnnotatedElementUtils.findMergedAnnotation(userFacingInterface,
+                    RequestMapping.class);
+            RequestMappingInfo typeMappingInfo = (typeRequestMapping != null)
+                    ? RequestMappingInfo.paths(typeRequestMapping.path()).build()
+                    : RequestMappingInfo.paths("").build();
 
             // Iterate over all methods in the interface
             for (Method method : userFacingInterface.getMethods()) {
                 // Check if the method is annotated with @RequestMapping or a derivative
                 // (@GetMapping, etc.)
-                RequestMapping requestMapping = AnnotatedElementUtils.findMergedAnnotation(method,
+                RequestMapping methodRequestMapping = AnnotatedElementUtils.findMergedAnnotation(method,
                         RequestMapping.class);
-                if (requestMapping != null) {
-                    // Create the mapping info from the annotation
-                    RequestMappingInfo mappingInfo = RequestMappingInfo
-                            .paths(requestMapping.path())
-                            .methods(requestMapping.method())
-                            .params(requestMapping.params())
-                            .headers(requestMapping.headers())
-                            .consumes(requestMapping.consumes())
-                            .produces(requestMapping.produces())
+                if (methodRequestMapping != null) {
+
+                    // Create the method-level mapping info
+                    RequestMappingInfo methodMappingInfo = RequestMappingInfo
+                            .paths(methodRequestMapping.path())
+                            .methods(methodRequestMapping.method())
+                            .params(methodRequestMapping.params())
+                            .headers(methodRequestMapping.headers())
+                            .consumes(methodRequestMapping.consumes())
+                            .produces(methodRequestMapping.produces())
                             .build();
 
-                    // Register the mapping with Spring's request handler
-                    handlerMapping.registerMapping(mappingInfo, beanInstance, method);
+                    // Combine the class-level and method-level mappings
+                    RequestMappingInfo combinedMappingInfo = typeMappingInfo.combine(methodMappingInfo);
+
+                    // FIX: Unregister the mapping first to avoid ambiguity.
+                    // This removes any mapping that Spring's initial scan might have created for
+                    // the interface.
+                    handlerMapping.unregisterMapping(combinedMappingInfo);
+
+                    // Register the mapping with our fully initialized proxy bean instance.
+                    handlerMapping.registerMapping(combinedMappingInfo, beanInstance, method);
+
+                    // Log the registered mapping for debugging purposes
+                    log.info("Registered proxy endpoint: {} {} -> {}.{}",
+                            combinedMappingInfo.getMethodsCondition(),
+                            combinedMappingInfo.getPatternsCondition(),
+                            userFacingInterface.getSimpleName(),
+                            method.getName());
                 }
             }
         });

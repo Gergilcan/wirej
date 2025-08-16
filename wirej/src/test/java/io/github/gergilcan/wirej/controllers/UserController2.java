@@ -22,7 +22,7 @@ public interface UserController2 {
     @GetMapping("/{id}")
     @ServiceMethod // Will automatically use "getUserById" method name
     @ResponseStatus(HttpStatus.OK)
-    ResponseEntity<?> getUserById(@PathVariable Long id);
+    ResponseEntity<?> getUserById(@PathVariable("id") Long id);
 
     @PostMapping("/create")
     @ServiceMethod("create") // Explicitly uses "create" method name
