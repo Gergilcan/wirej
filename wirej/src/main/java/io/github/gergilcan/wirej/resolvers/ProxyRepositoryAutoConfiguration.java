@@ -4,6 +4,8 @@ import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Set;
 
+import javax.sql.DataSource;
+
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.FactoryBean;
@@ -41,8 +43,8 @@ public class ProxyRepositoryAutoConfiguration {
     }
 
     @Bean
-    public ConnectionHandler connectionHandler() {
-        return new ConnectionHandler();
+    public ConnectionHandler connectionHandler(DataSource dataSource) {
+        return new ConnectionHandler(dataSource);
     }
 
     @Bean
