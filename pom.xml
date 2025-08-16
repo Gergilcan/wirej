@@ -6,7 +6,7 @@
 
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej-parent</artifactId>
-    <version>0.0.3.8</version>
+    <version>0.0.3.9</version>
     <packaging>pom</packaging>
 
     <name>WireJ Parent</name>
