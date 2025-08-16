@@ -16,12 +16,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import io.github.gergilcan.wirej.annotations.ServiceClass;
 import io.github.gergilcan.wirej.annotations.ServiceMethod;
 
-public class ServiceProxyFactoryBean<T> implements FactoryBean<T>, ApplicationContextAware {
+public class ControllerProxyFactoryBean<T> implements FactoryBean<T>, ApplicationContextAware {
 
     private final Class<T> proxyInterface;
     private ApplicationContext applicationContext;
 
-    public ServiceProxyFactoryBean(Class<T> proxyInterface) {
+    public ControllerProxyFactoryBean(Class<T> proxyInterface) {
         Assert.notNull(proxyInterface, "Proxy interface must not be null");
         this.proxyInterface = proxyInterface;
     }

@@ -148,7 +148,7 @@ public class ProxyControllerAutoConfiguration
                     try {
                         String interfaceName = candidate.getBeanClassName();
                         BeanDefinitionBuilder builder = BeanDefinitionBuilder
-                                .genericBeanDefinition(ServiceProxyFactoryBean.class);
+                                .genericBeanDefinition(ControllerProxyFactoryBean.class);
                         builder.addConstructorArgValue(Class.forName(interfaceName));
                         String beanName = StringUtils.uncapitalize(Class.forName(interfaceName).getSimpleName());
                         registry.registerBeanDefinition(beanName, builder.getBeanDefinition());
