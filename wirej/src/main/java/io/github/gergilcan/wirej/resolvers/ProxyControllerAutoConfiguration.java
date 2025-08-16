@@ -1,6 +1,8 @@
 package io.github.gergilcan.wirej.resolvers;
 
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.beans.BeansException;
@@ -12,80 +14,115 @@ import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
+import org.springframework.util.ClassUtils;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import io.github.gergilcan.wirej.annotations.ServiceClass;
 
+/**
+ * This is the entry point for the auto-configuration.
+ * It now implements ApplicationListener<ContextRefreshedEvent> to solve the 404
+ * issue
+ * by manually registering the request mappings after the context is
+ * initialized.
+ */
 @Configuration(proxyBeanMethods = false)
-public class ProxyControllerAutoConfiguration {
-    private ProxyControllerAutoConfiguration() {
-        // Private constructor to prevent instantiation
+public class ProxyControllerAutoConfiguration
+        implements ApplicationListener<ContextRefreshedEvent>, ApplicationContextAware {
+
+    private ApplicationContext applicationContext;
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = applicationContext;
     }
 
     /**
-     * This method registers our custom registrar.
-     * It must be static because BeanDefinitionRegistryPostProcessor runs very early
-     * in the startup process, before the @Configuration class itself is
-     * instantiated.
+     * This is the FIX for the 404 error.
+     * This method is called when the application context is fully initialized.
+     * We find our proxy controllers and manually register their request mappings.
      */
+    @Override
+    public void onApplicationEvent(ContextRefreshedEvent event) {
+        // Get the handler mapping bean that manages all @RequestMapping endpoints
+        RequestMappingHandlerMapping handlerMapping = applicationContext.getBean(RequestMappingHandlerMapping.class);
+
+        // Find all beans that were created from interfaces annotated with @ServiceClass
+        Map<String, Object> proxyControllers = applicationContext.getBeansWithAnnotation(ServiceClass.class);
+
+        proxyControllers.forEach((beanName, beanInstance) -> {
+            // The bean is a JDK Proxy. We need to find the original interface.
+            Class<?> userFacingInterface = ClassUtils.getUserClass(beanInstance);
+
+            // Iterate over all methods in the interface
+            for (Method method : userFacingInterface.getMethods()) {
+                // Check if the method is annotated with @RequestMapping or a derivative
+                // (@GetMapping, etc.)
+                RequestMapping requestMapping = AnnotatedElementUtils.findMergedAnnotation(method,
+                        RequestMapping.class);
+                if (requestMapping != null) {
+                    // Create the mapping info from the annotation
+                    RequestMappingInfo mappingInfo = RequestMappingInfo
+                            .paths(requestMapping.path())
+                            .methods(requestMapping.method())
+                            .params(requestMapping.params())
+                            .headers(requestMapping.headers())
+                            .consumes(requestMapping.consumes())
+                            .produces(requestMapping.produces())
+                            .build();
+
+                    // Register the mapping with Spring's request handler
+                    handlerMapping.registerMapping(mappingInfo, beanInstance, method);
+                }
+            }
+        });
+    }
+
     @Bean
     public static ProxyControllerRegistrar proxyControllerRegistrar() {
         return new ProxyControllerRegistrar();
     }
 
-    /**
-     * This static inner class is the core of the auto-configuration.
-     * It implements BeanDefinitionRegistryPostProcessor to scan for and register
-     * our proxy controllers after the application's beans have been defined.
-     */
     static class ProxyControllerRegistrar implements BeanDefinitionRegistryPostProcessor {
-
         @Override
         public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
-            // Use Spring's utility to find the base package of the main application class.
-            // This removes the need for the user to specify it manually.
             List<String> basePackages = AutoConfigurationPackages.get((BeanFactory) registry);
-
-            if (basePackages.isEmpty()) {
+            if (basePackages == null || basePackages.isEmpty())
                 return;
-            }
 
-            // Create a scanner to find our target interfaces
             ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(
                     false) {
                 @Override
                 protected boolean isCandidateComponent(AnnotatedBeanDefinition beanDefinition) {
-                    // We are only interested in interfaces
                     return beanDefinition.getMetadata().isInterface();
                 }
             };
-            // The interfaces must be annotated with @RestController and our custom
-            // @ServiceClass
             scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
             scanner.addIncludeFilter(new AnnotationTypeFilter(ServiceClass.class));
 
-            // Scan all discovered base packages
             for (String basePackage : basePackages) {
-                Set<BeanDefinition> candidateComponents = scanner.findCandidateComponents(basePackage);
-                for (BeanDefinition candidate : candidateComponents) {
+                Set<BeanDefinition> candidates = scanner.findCandidateComponents(basePackage);
+                for (BeanDefinition candidate : candidates) {
                     try {
-                        // Create a bean definition for our proxy factory
+                        String interfaceName = candidate.getBeanClassName();
                         BeanDefinitionBuilder builder = BeanDefinitionBuilder
                                 .genericBeanDefinition(ServiceProxyFactoryBean.class);
-
-                        // The factory needs to know which interface it is creating a proxy for.
-                        String interfaceName = candidate.getBeanClassName();
                         builder.addConstructorArgValue(Class.forName(interfaceName));
-
-                        // Register the factory bean with Spring
                         String beanName = StringUtils.uncapitalize(Class.forName(interfaceName).getSimpleName());
                         registry.registerBeanDefinition(beanName, builder.getBeanDefinition());
-
                     } catch (ClassNotFoundException e) {
                         throw new IllegalStateException(
                                 "Could not find class for bean definition: " + candidate.getBeanClassName(), e);
@@ -96,7 +133,7 @@ public class ProxyControllerAutoConfiguration {
 
         @Override
         public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
-            // We don't need to do anything here.
+            // No-op
         }
     }
 }

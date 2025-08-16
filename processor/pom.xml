@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.gergilcan</groupId>
         <artifactId>wirej-parent</artifactId>
-        <version>0.0.3.5</version>
+        <version>0.0.3.6</version>
     </parent>
 
     <artifactId>wirej-processor</artifactId>
