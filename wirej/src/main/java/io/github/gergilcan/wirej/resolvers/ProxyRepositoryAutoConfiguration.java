@@ -40,6 +40,16 @@ public class ProxyRepositoryAutoConfiguration {
         return new ProxyRepositoryRegistrar();
     }
 
+    @Bean
+    public ConnectionHandler connectionHandler() {
+        return new ConnectionHandler();
+    }
+
+    @Bean
+    public RsqlParser rsqlParser() {
+        return new RsqlParser();
+    }
+
     /**
      * This class scans for interfaces annotated with @Repository and registers
      * a proxy factory bean for each one.
