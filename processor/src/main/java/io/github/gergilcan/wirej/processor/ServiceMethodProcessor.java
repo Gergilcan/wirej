@@ -34,11 +34,17 @@ public class ServiceMethodProcessor extends AbstractProcessor {
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
         messager = processingEnv.getMessager();
-        messager.printMessage(Diagnostic.Kind.NOTE, "ServiceMethodProcessor is running.");
+        // Only print if this is not a subsequent round to reduce noise
+        messager.printMessage(Diagnostic.Kind.NOTE, "ServiceMethodProcessor initialized.");
     }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        // Skip processing if this is a subsequent round with no new files
+        if (roundEnv.processingOver()) {
+            return false;
+        }
+
         messager.printMessage(Diagnostic.Kind.NOTE, "Starting new processing round.");
 
         // Process @ServiceMethod annotations

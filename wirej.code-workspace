@@ -8,6 +8,17 @@
         "java.configuration.updateBuildConfiguration": "automatic",
         "java.compile.nullAnalysis.mode": "automatic",
         "java.autobuild.enabled": true,
-        "java.maxConcurrentBuilds": 1
+        "java.maxConcurrentBuilds": 1,
+        "java.compiler.annotationProcessing": true,
+        "java.eclipse.downloadSources": true,
+        "java.saveActions.organizeImports": true,
+        "java.jdt.ls.java.home": null,
+        "files.exclude": {
+            "**/target": true,
+            "**/.classpath": true,
+            "**/.project": true,
+            "**/.settings": true,
+            "**/.factorypath": true
+        }
     }
 }

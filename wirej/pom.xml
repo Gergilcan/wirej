@@ -100,6 +100,11 @@
                     <source>21</source>
                     <target>21</target>
                     <parameters>true</parameters>
+                    <!-- Ensure annotation processing is enabled -->
+                    <proc>full</proc>
+                    <!-- Add generatedSourcesDirectory for better IDE integration -->
+                    <generatedSourcesDirectory>
+                        ${project.build.directory}/generated-sources/annotations</generatedSourcesDirectory>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>io.github.gergilcan</groupId>

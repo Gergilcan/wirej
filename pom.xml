@@ -75,6 +75,8 @@
                         <target>21</target>
                         <release>21</release>
                         <parameters>true</parameters>
+                        <!-- Disable annotation processing by default to avoid circular dependencies -->
+                        <proc>none</proc>
                     </configuration>
                 </plugin>
 
