@@ -3,7 +3,19 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.gergilcan/wirej)](https://central.sonatype.com/artifact/io.github.gergilcan/wirej)
 [![Java](https://img.shields.io/badge/Java-21+-orange)](https://openjdk.java.net/projects/jdk/21/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5+-green)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5+-green)](```bash
+
+# Get first page (page 0) with 10 users
+
+GET /api/users/admin/all?pageNumber=0&pageSize=10
+
+# Get second page (page 1) with 20 users
+
+GET /api/users/admin/all?pageNumber=1&pageSize=20
+
+# Get third page (page 2) with 5 users
+
+GET /api/users/admin/all?pageNumber=2&pageSize=5pring.io/projects/spring-boot)
 
 **WireJ** is a lightweight Java framework that simplifies Spring Boot development by allowing you to write **interface-based controllers** and **SQL-file-based repositories** with compile-time validation. It eliminates boilerplate code while providing type safety and IDE support.
 
@@ -358,7 +370,7 @@ public interface UserController {
     );
 
     // Mixed explicit and implicit naming
-    @GetMapping("/kannact-user/{id}")
+    @GetMapping("/admin/{id}")
     @ServiceMethod
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> findById(@PathVariable("id") Long id);
@@ -388,7 +400,7 @@ public interface UserController {
     );
 
     // Pagination support with request parameters
-    @GetMapping("/kannact-user/all")
+    @GetMapping("/admin/all")
     @ServiceMethod("findAllPaginated")
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> findAllPaginated(
@@ -410,7 +422,7 @@ WireJ supports database pagination through request parameters combined with SQL 
 @ServiceClass(UserService.class)
 public interface UserController {
 
-    @GetMapping("/kannact-user/all")
+    @GetMapping("/admin/all")
     @ServiceMethod("findAllPaginated")
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> findAllPaginated(
@@ -445,13 +457,211 @@ OFFSET :initialPosition ROWS FETCH NEXT :pageSize ROWS ONLY
 
 ```bash
 # Get first page (page 0) with 10 users
-GET /api/users/kannact-user/all?pageNumber=0&pageSize=10
+GET /api/users/admin/all?pageNumber=0&pageSize=10
 
 # Get second page (page 1) with 20 users
-GET /api/users/kannact-user/all?pageNumber=1&pageSize=20
+GET /api/users/admin/all?pageNumber=1&pageSize=20
 
 # Get third page (page 2) with 5 users
-GET /api/users/kannact-user/all?pageNumber=2&pageSize=5
+GET /api/users/admin/all?pageNumber=2&pageSize=5
+```
+
+### Query Filtering with RequestFilters
+
+WireJ provides a `RequestFilters` class that allows for dynamic query filtering, searching, and sorting. This enables flexible and powerful query operations without hardcoding filter logic in your controllers.
+
+#### RequestFilters Class
+
+The `RequestFilters` class supports:
+
+- **Dynamic filters**: Add multiple filter conditions using RSQL syntax
+- **Search functionality**: General search across fields
+- **Sorting**: Specify sort order and direction
+
+```java
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class RequestFilters {
+    private String filters;    // Dynamic filter conditions (must be valid RSQL)
+    private String search;     // Search term
+    private String sort;       // Sort specification (default: "id==DESC")
+
+    public void addFilter(String filter) {
+        if (filters == null) {
+            filters = filter;
+        } else {
+            filters += ";" + filter;
+        }
+    }
+}
+```
+
+#### RSQL Filter Syntax
+
+The `filters` parameter must use valid **RSQL (RESTful Service Query Language)** syntax:
+
+**Basic Operators:**
+
+- `==` : Equal to
+- `!=` : Not equal to
+- `=gt=` or `>` : Greater than
+- `=ge=` or `>=` : Greater than or equal
+- `=lt=` or `<` : Less than
+- `=le=` or `<=` : Less than or equal
+- `=in=` : String contains
+
+**Logical Operators:**
+
+- `;` or `and` : AND condition
+- `,` or `or` : OR condition
+- `()` : Grouping
+
+**RSQL Examples:**
+
+```bash
+# Single condition
+filters=status==ACTIVE
+
+# Multiple conditions with AND
+filters=status==ACTIVE;age>25
+
+# Multiple conditions with OR
+filters=status==ACTIVE,status==PENDING
+
+# Complex conditions with grouping
+filters=(status==ACTIVE;age>25),role==ADMIN
+
+# Combining different operators
+filters=age>=18;age<=65;status!=INACTIVE
+```
+
+#### Controller with RequestFilters
+
+```java
+@RestController
+@RequestMapping("/api/users")
+@ServiceClass(UserService.class)
+public interface UserController {
+
+    // Simple filtering endpoint
+    @GetMapping("/filter")
+    @ServiceMethod("findWithFilters")
+    @ResponseStatus(HttpStatus.OK)
+    ResponseEntity<?> findWithFilters(RequestFilters filters);
+
+    // Combined pagination and filtering
+    @GetMapping("/filter/paginated")
+    @ServiceMethod("findWithFiltersAndPagination")
+    @ResponseStatus(HttpStatus.OK)
+    ResponseEntity<?> findWithFiltersAndPagination(
+        RequestFilters filters,
+        @RequestParam("pageNumber") int pageNumber,
+        @RequestParam("pageSize") int pageSize
+    );
+}
+```
+
+#### Repository with RequestFilters
+
+```java
+@Repository
+public interface UserRepository {
+    @QueryFile("/queries/users/findWithFilters.sql")
+    List<User> findWithFilters(RequestFilters filters);
+
+    @QueryFile("/queries/users/findWithFiltersAndPagination.sql")
+    List<User> findWithFiltersAndPagination(
+        RequestFilters filters,
+        int pageNumber,
+        int pageSize,
+        int initialPosition
+    );
+}
+```
+
+#### SQL Files with RequestFilters
+
+**src/main/resources/queries/users/findWithFilters.sql**
+
+```sql
+SELECT id, name, email, status, created_at
+FROM users
+WHERE deleted = false
+  AND (
+    :search IS NULL OR
+    LOWER(name) LIKE LOWER(CONCAT('%', :search, '%')) OR
+    LOWER(email) LIKE LOWER(CONCAT('%', :search, '%'))
+  )
+  :filters :sorting
+```
+
+**src/main/resources/queries/users/findWithFiltersAndPagination.sql**
+
+```sql
+SELECT id, name, email, status, created_at
+FROM users
+WHERE deleted = false
+  AND (
+    :search IS NULL OR
+    LOWER(name) LIKE LOWER(CONCAT('%', :search, '%')) OR
+    LOWER(email) LIKE LOWER(CONCAT('%', :search, '%'))
+  )
+  :filters :sorting
+OFFSET :initialPosition ROWS FETCH NEXT :pageSize ROWS ONLY
+```
+
+#### Service Implementation
+
+```java
+@Service
+@RequiredArgsConstructor
+public class UserService {
+    private final UserRepository userRepository;
+
+    public List<User> findWithFilters(RequestFilters filters) {
+        return userRepository.findWithFilters(filters);
+    }
+
+    public List<User> findWithFiltersAndPagination(RequestFilters filters, int pageNumber, int pageSize) {
+        return userRepository.findWithFiltersAndPagination(filters, pageNumber, pageSize);
+    }
+}
+```
+
+#### Usage Examples
+
+**Simple Search Request:**
+
+```bash
+GET /api/users/filter?search=john&sort=name==ASC
+```
+
+**Complex Filtering Request:**
+
+````bash
+**Complex Filtering Request:**
+```bash
+GET /api/users/filter?filters=status==ACTIVE;age=gt=25&search=developer&sort=created_at==DESC
+````
+
+**Multiple Filters with OR condition:**
+
+```bash
+GET /api/users/filter?filters=status==ACTIVE,status==PENDING&search=developer
+```
+
+**Complex RSQL with grouping:**
+
+```bash
+GET /api/users/filter?filters=(status==ACTIVE;age=ge=18),role==ADMIN&sort=name==ASC
+```
+
+**Paginated Filtering Request:**
+
+```bash
+GET /api/users/filter/paginated?pageNumber=0&pageSize=10&search=admin&sort=email==ASC
 ```
 
 ### Complete Controller Example
