@@ -1,168 +1,165 @@
 package io.github.gergilcan.wirej.resolvers;
 
-import java.lang.reflect.Method;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
+import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
-import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.context.ApplicationListener;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
-import org.springframework.util.ClassUtils;
-import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
-import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import io.github.gergilcan.wirej.annotations.ServiceClass;
+import io.github.gergilcan.wirej.config.WireJConfiguration;
+import lombok.extern.slf4j.Slf4j;
 
-/**
- * This is the entry point for the auto-configuration.
- * It now implements ApplicationListener<ContextRefreshedEvent> to solve the 404
- * issue
- * by manually registering the request mappings after the context is
- * initialized.
- */
 @Configuration(proxyBeanMethods = false)
-public class ProxyControllerAutoConfiguration
-        implements ApplicationListener<ContextRefreshedEvent>, ApplicationContextAware {
-
-    private static final Logger log = LoggerFactory.getLogger(ProxyControllerAutoConfiguration.class);
-    private ApplicationContext applicationContext;
+@EnableConfigurationProperties(WireJConfiguration.class)
+@Slf4j
+public class ProxyControllerAutoConfiguration implements BeanDefinitionRegistryPostProcessor {
 
     @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        this.applicationContext = applicationContext;
+    public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
+        ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false) {
+            @Override
+            protected boolean isCandidateComponent(
+                    org.springframework.beans.factory.annotation.AnnotatedBeanDefinition beanDefinition) {
+                // First check basic requirements
+                if (!beanDefinition.getMetadata().isInterface()) {
+                    return false;
+                }
+                if (!beanDefinition.getMetadata().hasAnnotation(RestController.class.getName())) {
+                    return false;
+                }
+
+                // Try multiple ways to detect @ServiceClass annotation
+                try {
+                    Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
+
+                    // Check all available annotations
+                    log.debug("Available annotations on {}: {}", clazz.getName(),
+                            java.util.Arrays.toString(clazz.getAnnotations()));
+                    log.debug("Available declared annotations on {}: {}", clazz.getName(),
+                            java.util.Arrays.toString(clazz.getDeclaredAnnotations()));
+
+                    // Check annotation names
+                    boolean hasServiceClass = java.util.Arrays.stream(clazz.getDeclaredAnnotations())
+                            .anyMatch(ann -> ann instanceof io.github.gergilcan.wirej.annotations.ServiceClass);
+
+                    log.debug(
+                            "Checking candidate: {} - Interface: {}, RestController: {}, ServiceClass: {} (direct check)",
+                            beanDefinition.getBeanClassName(),
+                            beanDefinition.getMetadata().isInterface(),
+                            beanDefinition.getMetadata().hasAnnotation(RestController.class.getName()),
+                            hasServiceClass);
+
+                    return hasServiceClass;
+                } catch (ClassNotFoundException e) {
+                    log.warn("Could not load class for annotation check: {}", beanDefinition.getBeanClassName());
+                    return false;
+                }
+            }
+        };
+
+        // Only add RestController filter since we need both annotations
+        scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
+
+        // Detect application packages dynamically
+        // Get packages to scan from the application context
+
+        List<String> packagesToScan = AutoConfigurationPackages.get((BeanFactory) registry);
+
+        log.info("WireJ scanning base packages: {}", packagesToScan);
+
+        Set<BeanDefinition> candidates = new java.util.HashSet<>();
+        for (String packageToScan : packagesToScan) {
+            Set<BeanDefinition> packageCandidates = scanner.findCandidateComponents(packageToScan);
+            candidates.addAll(packageCandidates);
+            log.debug("Found {} candidates in package: {}", packageCandidates.size(), packageToScan);
+        }
+        log.info("Found {} total controller candidates across all packages", candidates.size());
+        for (BeanDefinition candidate : candidates) {
+            try {
+
+                Class<?> controllerInterface = Class.forName(candidate.getBeanClassName());
+                ServiceClass serviceClassAnnotation = controllerInterface.getAnnotation(ServiceClass.class);
+
+                if (serviceClassAnnotation == null) {
+                    log.warn("Controller interface {} does not have @ServiceClass annotation",
+                            controllerInterface.getName());
+                    continue;
+                }
+
+                log.info("Processing controller interface: {}", controllerInterface.getName());
+                Class<?> serviceClass = serviceClassAnnotation.value();
+                String beanName = controllerInterface.getSimpleName();
+                beanName = Character.toLowerCase(beanName.charAt(0)) + beanName.substring(1);
+
+                BeanDefinitionBuilder builder = BeanDefinitionBuilder
+                        .genericBeanDefinition(ControllerProxyFactoryBean.class);
+                builder.addConstructorArgValue(controllerInterface);
+                builder.addConstructorArgValue(serviceClass);
+
+                // Ensure the bean definition has the correct type
+                BeanDefinition beanDefinition = builder.getBeanDefinition();
+                beanDefinition.setAttribute("factoryBeanObjectType", controllerInterface);
+
+                registry.registerBeanDefinition(beanName, beanDefinition);
+                log.debug("Registered controller proxy: {} for interface: {} with service: {}",
+                        beanName, controllerInterface.getName(), serviceClass.getName());
+            } catch (ClassNotFoundException e) {
+                log.error("Could not load class: {}", candidate.getBeanClassName(), e);
+            }
+        }
     }
 
-    /**
-     * This is the FIX for the 404 and Ambiguous Mapping errors.
-     * This method is called when the application context is fully initialized.
-     * We find our proxy controllers and manually register their request mappings.
-     */
     @Override
-    public void onApplicationEvent(ContextRefreshedEvent event) {
-        // Get the handler mapping bean that manages all @RequestMapping endpoints
-        RequestMappingHandlerMapping handlerMapping = applicationContext.getBean(RequestMappingHandlerMapping.class);
-
-        // Find all beans that were created from interfaces annotated with @ServiceClass
-        Map<String, Object> proxyControllers = applicationContext.getBeansWithAnnotation(ServiceClass.class);
-
-        log.info("Found {} proxy controllers to register.", proxyControllers.size());
-
-        proxyControllers.forEach((beanName, beanInstance) -> {
-            // The bean is a JDK Proxy. We need to find the original interface.
-            Class<?> userFacingInterface = ClassUtils.getUserClass(beanInstance);
-            log.debug("Processing proxy controller: {}", userFacingInterface.getName());
-
-            // Get the class-level @RequestMapping to use as a path prefix
-            RequestMapping typeRequestMapping = AnnotatedElementUtils.findMergedAnnotation(userFacingInterface,
-                    RequestMapping.class);
-            RequestMappingInfo typeMappingInfo = (typeRequestMapping != null)
-                    ? RequestMappingInfo.paths(typeRequestMapping.path()).build()
-                    : RequestMappingInfo.paths("").build();
-
-            // Iterate over all methods in the interface
-            for (Method method : userFacingInterface.getMethods()) {
-                // Check if the method is annotated with @RequestMapping or a derivative
-                // (@GetMapping, etc.)
-                RequestMapping methodRequestMapping = AnnotatedElementUtils.findMergedAnnotation(method,
-                        RequestMapping.class);
-                if (methodRequestMapping != null) {
-
-                    // Create the method-level mapping info
-                    RequestMappingInfo methodMappingInfo = RequestMappingInfo
-                            .paths(methodRequestMapping.path())
-                            .methods(methodRequestMapping.method())
-                            .params(methodRequestMapping.params())
-                            .headers(methodRequestMapping.headers())
-                            .consumes(methodRequestMapping.consumes())
-                            .produces(methodRequestMapping.produces())
-                            .build();
-
-                    // Combine the class-level and method-level mappings
-                    RequestMappingInfo combinedMappingInfo = typeMappingInfo.combine(methodMappingInfo);
-
-                    // FIX: Unregister the mapping first to avoid ambiguity.
-                    // This removes any mapping that Spring's initial scan might have created for
-                    // the interface.
-                    handlerMapping.unregisterMapping(combinedMappingInfo);
-
-                    // Register the mapping with our fully initialized proxy bean instance.
-                    handlerMapping.registerMapping(combinedMappingInfo, beanInstance, method);
-
-                    // Log the registered mapping for debugging purposes
-                    log.info("Registered proxy endpoint: {} {} -> {}.{}",
-                            combinedMappingInfo.getMethodsCondition(),
-                            combinedMappingInfo.getPatternsCondition(),
-                            userFacingInterface.getSimpleName(),
-                            method.getName());
-                }
-            }
-        });
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+        // No post-processing needed here
     }
 
-    @Bean
-    public static ProxyControllerRegistrar proxyControllerRegistrar() {
-        return new ProxyControllerRegistrar();
-    }
+    public static class ControllerProxyFactoryBean implements FactoryBean<Object>, ApplicationContextAware {
+        private final Class<?> controllerInterface;
+        private final Class<?> serviceClass;
+        private ApplicationContext applicationContext;
 
-    static class ProxyControllerRegistrar implements BeanDefinitionRegistryPostProcessor {
-        @Override
-        public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
-            List<String> basePackages = AutoConfigurationPackages.get((BeanFactory) registry);
-            if (basePackages == null || basePackages.isEmpty())
-                return;
-
-            ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(
-                    false) {
-                @Override
-                protected boolean isCandidateComponent(AnnotatedBeanDefinition beanDefinition) {
-                    return beanDefinition.getMetadata().isInterface();
-                }
-            };
-            scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
-            scanner.addIncludeFilter(new AnnotationTypeFilter(ServiceClass.class));
-
-            for (String basePackage : basePackages) {
-                Set<BeanDefinition> candidates = scanner.findCandidateComponents(basePackage);
-                for (BeanDefinition candidate : candidates) {
-                    try {
-                        String interfaceName = candidate.getBeanClassName();
-                        BeanDefinitionBuilder builder = BeanDefinitionBuilder
-                                .genericBeanDefinition(ControllerProxyFactoryBean.class);
-                        builder.addConstructorArgValue(Class.forName(interfaceName));
-                        String beanName = StringUtils.uncapitalize(Class.forName(interfaceName).getSimpleName());
-                        registry.registerBeanDefinition(beanName, builder.getBeanDefinition());
-                    } catch (ClassNotFoundException e) {
-                        throw new IllegalStateException(
-                                "Could not find class for bean definition: " + candidate.getBeanClassName(), e);
-                    }
-                }
-            }
+        public ControllerProxyFactoryBean(Class<?> controllerInterface, Class<?> serviceClass) {
+            this.controllerInterface = controllerInterface;
+            this.serviceClass = serviceClass;
         }
 
         @Override
-        public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
-            // No-op
+        public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+            this.applicationContext = applicationContext;
+        }
+
+        @Override
+        public Object getObject() {
+            return java.lang.reflect.Proxy.newProxyInstance(
+                    controllerInterface.getClassLoader(),
+                    new Class<?>[] { controllerInterface },
+                    new ControllerInvocationHandler(applicationContext, serviceClass));
+        }
+
+        @Override
+        public Class<?> getObjectType() {
+            return controllerInterface;
+        }
+
+        @Override
+        public boolean isSingleton() {
+            return true;
         }
     }
 }
