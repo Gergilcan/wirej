@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.gergilcan</groupId>
         <artifactId>wirej-parent</artifactId>
-        <version>0.0.3.10</version>
+        <version>0.0.3.11</version>
     </parent>
 
     <artifactId>wirej-processor</artifactId>
@@ -35,4 +35,30 @@
             <version>${project.version}</version>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Override parent compiler configuration to enable annotation processing for
+            AutoService -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>21</source>
+                    <target>21</target>
+                    <release>21</release>
+                    <parameters>true</parameters>
+                    <!-- Enable annotation processing for AutoService to generate service files -->
+                    <proc>full</proc>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.google.auto.service</groupId>
+                            <artifactId>auto-service</artifactId>
+                            <version>1.1.1</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>
