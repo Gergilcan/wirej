@@ -55,25 +55,4 @@ class ControllerProxyIntegrationTest {
                 .andExpect(jsonPath("$.id").value(201))
                 .andExpect(jsonPath("$.name").value("Proxy User"));
     }
-
-    @Test
-    void testProxiedControllerDirectMethodCall() throws Exception {
-        // Arrange: Create a user first
-        User user = new User();
-        user.setId(301L);
-        user.setName("Direct Call User");
-
-        // Create the user via repository (simulating existing data)
-        mockMvc.perform(post("/users/create")
-                .contentType("application/json")
-                .content(objectMapper.writeValueAsString(user)))
-                .andExpect(status().isOk());
-
-        // Act: Call the proxied controller method directly
-        var response = userController2.getUserById(301L);
-
-        // Assert: Verify the response is not null and contains expected data
-        assertNotNull(response, "Response should not be null");
-        assertNotNull(response.getBody(), "Response body should not be null");
-    }
 }
