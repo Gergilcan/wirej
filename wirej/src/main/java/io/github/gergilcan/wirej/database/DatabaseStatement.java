@@ -14,7 +14,9 @@ import java.util.regex.Pattern;
 
 import io.github.gergilcan.PostgreSQLmapper.core.PostgresEntityMapper;
 import io.github.gergilcan.wirej.core.RequestFilters;
+import io.github.gergilcan.wirej.core.RequestPagination;
 import io.github.gergilcan.wirej.rsql.RsqlParser;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 // nosemgrep
@@ -25,6 +27,7 @@ public class DatabaseStatement<T> {
   private Class<?> entityClass;
   private Connection connection;
 
+  @Getter
   private String originalQuery;
   private String finalQuery;
 
@@ -60,21 +63,21 @@ public class DatabaseStatement<T> {
 
   public DatabaseStatement(String fileName, RequestFilters filters, Class<?> entityClass,
       ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, filters, null, null, entityClass, null, connectionHandler);
+    this(fileName, filters, null, entityClass, null, connectionHandler);
   }
 
   public DatabaseStatement(String fileName, RequestFilters filters, Class<?> entityClass, RsqlParser parser,
       ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, filters, null, null, entityClass, parser, connectionHandler);
+    this(fileName, filters, null, entityClass, parser, connectionHandler);
   }
 
-  public DatabaseStatement(String fileName, RequestFilters filters, Integer pageNumber, Integer pageSize,
+  public DatabaseStatement(String fileName, RequestFilters filters, RequestPagination pagination,
       Class<?> entityClass, RsqlParser parser, ConnectionHandler connectionHandler) throws IOException, SQLException {
     this(fileName, entityClass, connectionHandler);
 
-    if (pageNumber != null && pageSize != null) {
-      setParameter("initialPosition", pageNumber * pageSize);
-      setParameter("pageSize", pageSize);
+    if (pagination != null) {
+      setParameter("initialPosition", pagination.getPageNumber() * pagination.getPageSize());
+      setParameter("pageSize", pagination.getPageSize());
     }
     if (filters != null) {
       setParameter("search",

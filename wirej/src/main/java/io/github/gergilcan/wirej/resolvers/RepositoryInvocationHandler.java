@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 
 import io.github.gergilcan.wirej.annotations.QueryFile;
 import io.github.gergilcan.wirej.core.RequestFilters;
+import io.github.gergilcan.wirej.core.RequestPagination;
 import io.github.gergilcan.wirej.database.ConnectionHandler;
 import io.github.gergilcan.wirej.database.DatabaseStatement;
 import io.github.gergilcan.wirej.rsql.RsqlParser;
@@ -30,10 +31,9 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         var isBatch = method.getAnnotation(QueryFile.class).isBatch();
 
         RequestFilters filters = getParameterValueFromType(method, args, RequestFilters.class);
-        Integer pageNumber = getParameterValueFromName(method, args, "pageNumber");
-        Integer pageSize = getParameterValueFromName(method, args, "pageSize");
+        RequestPagination pagination = getParameterValueFromType(method, args, RequestPagination.class);
 
-        var databaseStatement = new DatabaseStatement<>(fileName, filters, pageNumber, pageSize,
+        var databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
                 returnType.isArray() ? returnType.getComponentType() : returnType, rsqlParser, connectionHandler);
 
         // Set parameters for the statement
@@ -163,20 +163,8 @@ public class RepositoryInvocationHandler implements InvocationHandler {
     }
 
     @SuppressWarnings("unchecked")
-    private <T> T getParameterValueFromName(Method method, Object[] args, String propertyName) {
-        if (args != null && args.length > 1) {
-            for (int i = 0; i < method.getParameters().length; i++) {
-                if (method.getParameters()[i].getName().equals(propertyName)) {
-                    return (T) args[i];
-                }
-            }
-        }
-        return null;
-    }
-
-    @SuppressWarnings("unchecked")
     private <T> T getParameterValueFromType(Method method, Object[] args, Class<T> type) {
-        if (args != null && args.length > 1) {
+        if (args != null && args.length > 0) {
             for (int i = 0; i < method.getParameters().length; i++) {
                 if (method.getParameters()[i].getType().equals(type)) {
                     return (T) args[i];

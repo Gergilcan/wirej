@@ -2,6 +2,8 @@ package io.github.gergilcan.wirej.services;
 
 import org.springframework.stereotype.Service;
 
+import io.github.gergilcan.wirej.core.RequestFilters;
+import io.github.gergilcan.wirej.core.RequestPagination;
 import io.github.gergilcan.wirej.entities.User;
 import io.github.gergilcan.wirej.repositories.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,11 @@ public class UsersService {
 
     public User getUserById(Long id) {
         return userRepository.findById(id);
+    }
+
+    public User[] getFiltered(RequestFilters filters, RequestPagination pagination) {
+        // Assuming there's a method in UserRepository to handle filters
+        return userRepository.findByFilters(filters, pagination);
     }
 
     public void create(User newUser) {

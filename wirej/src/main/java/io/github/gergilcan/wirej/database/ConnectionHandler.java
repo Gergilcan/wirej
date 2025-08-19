@@ -1,5 +1,6 @@
 package io.github.gergilcan.wirej.database;
 
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +15,10 @@ public class ConnectionHandler {
 	private final DataSource dataSource;
 	private Connection connection;
 	private Statement statement;
+	@Setter
 	private String cleanupQuery;
+	@Setter
+	private boolean isTest;
 
 	public ConnectionHandler(DataSource dataSource) {
 		this.dataSource = dataSource;
@@ -31,16 +35,11 @@ public class ConnectionHandler {
 			statement = connection.createStatement();
 		}
 
-		if (!isTestDatabase(connection)) {
+		if (!isTest || cleanupQuery == null || cleanupQuery.isEmpty()) {
 			return;
 		}
 
 		// Execute cleanup
 		statement.execute(cleanupQuery);
-	}
-
-	private boolean isTestDatabase(Connection connection) throws SQLException {
-		return connection.getMetaData().getDatabaseProductName().equals("postgres") ||
-				connection.getMetaData().getDatabaseProductName().equals("localhost");
 	}
 }

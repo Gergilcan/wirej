@@ -12,6 +12,8 @@ import org.springframework.http.HttpStatus;
 
 import io.github.gergilcan.wirej.annotations.ServiceClass;
 import io.github.gergilcan.wirej.annotations.ServiceMethod;
+import io.github.gergilcan.wirej.core.RequestFilters;
+import io.github.gergilcan.wirej.core.RequestPagination;
 import io.github.gergilcan.wirej.entities.User;
 import io.github.gergilcan.wirej.services.UsersService;
 
@@ -23,6 +25,10 @@ public interface UserController2 {
     @ServiceMethod // Will automatically use "getUserById" method name
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> getUserById(@PathVariable("id") Long id);
+
+    @GetMapping("/")
+    @ServiceMethod
+    public ResponseEntity<?> getFiltered(RequestFilters filters, RequestPagination pagination);
 
     @PostMapping("/create")
     @ServiceMethod("create") // Explicitly uses "create" method name

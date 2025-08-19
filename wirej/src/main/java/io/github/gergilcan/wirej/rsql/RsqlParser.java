@@ -18,6 +18,8 @@ import io.github.gergilcan.wirej.database.DatabaseStatement;
 @Component
 public class RsqlParser {
 
+  private static final String AND = " AND ";
+
   public String parse(String rsqlQuery, Class<?> entityClass, DatabaseStatement<?> statement) {
     AtomicInteger parameterNumber = new AtomicInteger(0);
     var queryParts = rsqlQuery.split(";");
@@ -29,7 +31,16 @@ public class RsqlParser {
       }
     }
 
-    return "AND " + String.join(" AND ", whereClauses);
+    // Check if the where :filters is in first place in the original statement quer
+    if (statement.getOriginalQuery().toLowerCase().contains("where :filters")) {
+      return String.join(AND, whereClauses);
+    }
+
+    if (!statement.getOriginalQuery().toLowerCase().contains("where")) {
+      return "WHERE " + String.join(AND, whereClauses);
+    }
+
+    return "AND " + String.join(AND, whereClauses);
   }
 
   private String parseWhereClause(String part, Class<?> entityClass, DatabaseStatement<?> statement,
