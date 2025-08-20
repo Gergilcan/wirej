@@ -14,9 +14,12 @@ import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 // Explicitly list all annotations the processor might interact with.
 @SupportedAnnotationTypes({
@@ -27,7 +30,6 @@ import java.util.stream.Collectors;
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 @AutoService(Processor.class)
 public class ServiceMethodProcessor extends AbstractProcessor {
-
     private Messager messager;
 
     @Override
@@ -130,47 +132,72 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         boolean fileFound = false;
         String foundLocation = "";
 
-        // Strategy 1: Try to find in class output resources (after resources are
-        // processed)
+        // Strategy 1: Check the annotation processor classpath
+        // (ANNOTATION_PROCESSOR_PATH)
+        // This includes the application's compiled resources
         try {
-            FileObject resource = processingEnv.getFiler().getResource(
-                    StandardLocation.CLASS_OUTPUT, "", resourcePath);
-            resource.openInputStream().close();
-            fileFound = true;
-            foundLocation = "class output";
+            messager.printMessage(Diagnostic.Kind.NOTE, "Checking for query file: " + resourcePath);
+            try (Stream<Path> file = Files.find(Path.of("."), 10,
+                    (p, basicFileAttributes) -> p.getFileName().toString().equalsIgnoreCase(resourcePath))) {
+                file.findFirst().ifPresent(f -> messager.printMessage(Diagnostic.Kind.NOTE,
+                        "✓ Found query file: " + resourcePath + " in " + f.toAbsolutePath()));
+            }
         } catch (IOException e) {
-            // File not found in class output, continue to next strategy
+            // Continue to next strategy
         }
 
-        // Strategy 2: Try to find using class path resource (this works better in
-        // practice)
+        try {
+
+            FileObject resource = processingEnv.getFiler().getResource(
+                    StandardLocation.ANNOTATION_PROCESSOR_PATH, "", resourcePath);
+            resource.openInputStream().close();
+            fileFound = true;
+            foundLocation = "annotation processor path";
+        } catch (IOException e) {
+            // Continue to next strategy
+        }
+
+        // Strategy 2: Check class path - this includes compiled resources
         if (!fileFound) {
             try {
-                // Try to load as a classpath resource
-                ClassLoader classLoader = method.getClass().getClassLoader();
-                if (classLoader.getResource(resourcePath) != null) {
-                    fileFound = true;
-                    foundLocation = "classpath";
-                }
-            } catch (Exception e) {
+                FileObject resource = processingEnv.getFiler().getResource(
+                        StandardLocation.CLASS_PATH, "", resourcePath);
+                resource.openInputStream().close();
+                fileFound = true;
+                foundLocation = "class path";
+            } catch (IOException e) {
                 // Continue to next strategy
             }
         }
 
-        if (fileFound) {
+        // Strategy 3: Try class output (for cases where resources are already
+        // processed)
+        if (!fileFound) {
+            try {
+                FileObject resource = processingEnv.getFiler().getResource(
+                        StandardLocation.CLASS_OUTPUT, "", resourcePath);
+                resource.openInputStream().close();
+                fileFound = true;
+                foundLocation = "class output";
+            } catch (IOException e) {
+                // Continue to next strategy
+            }
+        }
+
+        // Strategy 4: As a last resort, make it just a warning during development
+        // since the file might not be compiled yet but exists in source
+        if (!fileFound) {
+            // During annotation processing, resource files might not be available yet
+            // This is especially common in IDEs during development
+            error(method, "Query file not found during compilation: " + resourcePath +
+                    " for method " + method.getSimpleName() +
+                    ". This might be normal if the resource hasn't been processed yet. " +
+                    "Ensure the file exists in src/main/resources/" + resourcePath +
+                    " or src/test/resources/" + resourcePath);
+        } else {
             messager.printMessage(Diagnostic.Kind.NOTE,
                     "✓ Found query file: " + resourcePath + " in " + foundLocation +
                             " for method " + method.getSimpleName());
-        } else {
-            // Add more detailed debugging information
-            String currentDir = System.getProperty("user.dir");
-            messager.printMessage(Diagnostic.Kind.WARNING,
-                    "Debug info - Current working directory: " + currentDir +
-                            ", looking for: " + resourcePath);
-
-            error(method,
-                    "✗ Query file not found: %s. Make sure the file exists in src/main/resources/%s or src/test/resources/%s",
-                    resourcePath, resourcePath, resourcePath);
         }
     }
 

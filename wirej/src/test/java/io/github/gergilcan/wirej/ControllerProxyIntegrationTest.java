@@ -3,6 +3,7 @@ package io.github.gergilcan.wirej;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,5 +55,22 @@ class ControllerProxyIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(201))
                 .andExpect(jsonPath("$.name").value("Proxy User"));
+    }
+
+    @Test
+    void testProxiedControllerWithServiceMethodCreationAndDeletion() throws Exception {
+        // Arrange: Create a user using the proxied controller
+        User user = new User();
+        user.setId(201L);
+        user.setName("Proxy User");
+
+        // Act: Test the POST endpoint with @ServiceMethod("create")
+        mockMvc.perform(post("/users2/create")
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(user)))
+                .andExpect(status().isCreated());
+
+        // Act & Assert: Test the GET endpoint with @ServiceMethod (uses method name)
+        mockMvc.perform(delete("/users2/201")).andExpect(status().isNoContent());
     }
 }

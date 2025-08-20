@@ -1,6 +1,7 @@
 package io.github.gergilcan.wirej.controllers;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,4 +35,9 @@ public interface UserController2 {
     @ServiceMethod("create") // Explicitly uses "create" method name
     @ResponseStatus(HttpStatus.CREATED)
     ResponseEntity<?> createUser(@RequestBody User newUser);
+
+    @DeleteMapping("/{id}")
+    @ServiceMethod("delete") // Explicitly uses "delete" method name
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    ResponseEntity<?> deleteUser(@PathVariable("id") Long id);
 }

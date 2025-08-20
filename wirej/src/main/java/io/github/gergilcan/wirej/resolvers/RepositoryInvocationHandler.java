@@ -2,6 +2,7 @@ package io.github.gergilcan.wirej.resolvers;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.sql.SQLException;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
@@ -70,22 +71,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
             // If its not a batch statement
             setParameters(method, args, databaseStatement);
         } else {
-            // If its a batch statement, we need to set the parameters
-            // we look for the parameters in the method that is an array so we know that
-            // those are the ones to be iterated
-            // over
-            for (var arg : args) {
-                if (arg.getClass().isArray()) {
-                    for (Object item : (Object[]) arg) {
-                        // Set parameter for each property of the item
-                        setObjectFieldsToStatement(item, databaseStatement);
-                        databaseStatement.addBatch();
-                    }
-                } else {
-                    getParameterValueFromType(method, args, method.getReturnType());
-                    setObjectFieldsToStatement(arg, databaseStatement);
-                }
-            }
+            setBatchParameters(method, args, databaseStatement);
         }
     }
 
@@ -132,6 +118,32 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         }
     }
 
+    private void setBatchParameters(Method method, Object[] args, DatabaseStatement<?> databaseStatement)
+            throws SQLException {
+        var methodParameters = method.getParameters();
+        if (args == null) {
+            return;
+        }
+        for (int i = 0; i < args.length; i++) {
+            String paramName = methodParameters[i].getName();
+            if (shouldSkipParameter(paramName)) {
+                continue;
+            }
+            if (args[i].getClass().isArray()) {
+                // If the argument is an array, we need to iterate over the array and set the
+                // parameters for each item
+                for (Object item : (Object[]) args[i]) {
+                    if (isParameterAClass(item)) {
+                        setObjectFieldsToStatement(item, databaseStatement);
+                    } else {
+                        setSingleParameter(methodParameters[i], item, databaseStatement);
+                    }
+                    databaseStatement.addBatch();
+                }
+            }
+        }
+    }
+
     private boolean shouldSkipParameter(String paramName) {
         return paramName.equals("filters") || paramName.equals("pageNumber") || paramName.equals("pageSize");
     }
@@ -139,12 +151,14 @@ public class RepositoryInvocationHandler implements InvocationHandler {
     private boolean isParameterAClass(Object arg) {
         // Exclude also the Boolean, Integer, Long, and primitive types
         if (arg == null || arg.getClass().isPrimitive() || arg instanceof String ||
-                arg instanceof Boolean || arg instanceof Integer || arg instanceof Long) {
+                arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
+                || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal) {
             return false;
         }
         // Check if the argument is a class type and not an array of primitives or
         // arrays
-        if (arg.getClass().isArray() && arg.getClass().getComponentType().isPrimitive()) {
+        if (arg.getClass().isArray() && (arg.getClass().getComponentType().isPrimitive()
+                || arg.getClass().getComponentType() == String.class)) {
             return false;
         }
 

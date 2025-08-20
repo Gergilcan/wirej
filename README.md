@@ -5,18 +5,6 @@
 [![Java](https://img.shields.io/badge/Java-21+-orange)](https://openjdk.java.net/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5+-green)](```bash
 
-# Get first page (page 0) with 10 users
-
-GET /api/users/admin/all?pageNumber=0&pageSize=10
-
-# Get second page (page 1) with 20 users
-
-GET /api/users/admin/all?pageNumber=1&pageSize=20
-
-# Get third page (page 2) with 5 users
-
-GET /api/users/admin/all?pageNumber=2&pageSize=5pring.io/projects/spring-boot)
-
 **WireJ** is a lightweight Java framework that simplifies Spring Boot development by allowing you to write **interface-based controllers** and **SQL-file-based repositories** with compile-time validation. It eliminates boilerplate code while providing type safety and IDE support.
 
 ## 🚀 What is WireJ?
@@ -39,14 +27,14 @@ Add WireJ to your Spring Boot project:
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej</artifactId>
-    <version>1.0.0.2</version>
+    <version>1.0.0.4</version>
 </dependency>
 
 <!-- For compile-time validation (recommended) -->
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej-processor</artifactId>
-    <version>1.0.0.2</version>
+    <version>1.0.0.4</version>
     <scope>provided</scope>
     <optional>true</optional>
 </dependency>
@@ -55,8 +43,8 @@ Add WireJ to your Spring Boot project:
 ### Gradle
 
 ```gradle
-implementation 'io.github.gergilcan:wirej:1.0.0.2'
-annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.0.2'
+implementation 'io.github.gergilcan:wirej:1.0.0.4'
+annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.0.4'
 ```
 
 ### Maven Compiler Configuration (Required for Annotation Processing)
@@ -75,7 +63,7 @@ annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.0.2'
                     <path>
                         <groupId>io.github.gergilcan</groupId>
                         <artifactId>wirej-processor</artifactId>
-                        <version>1.0.0.2</version>
+                        <version>1.0.0.4</version>
                     </path>
                 </annotationProcessorPaths>
             </configuration>
@@ -113,6 +101,15 @@ public interface UserRepository {
 
     @QueryFile("/queries/users/create.sql")
     void create(User user);
+
+    /**
+     * Deletes users by their IDs.
+     *
+     * @param ids the IDs of the users to delete, JsonAlias can be used to specify the name of the parameter used inside
+     * the query
+     */
+    @QueryFile(value = "/queries/users/delete.sql", isBatch = true)
+    void delete(@JsonAlias("id") Long[] ids);
 }
 ```
 
@@ -139,6 +136,13 @@ WHERE email = :email
 ```sql
 INSERT INTO users (id, name, email)
 VALUES (:id, :name, :email)
+```
+
+**src/main/resources/queries/users/delete.sql**
+
+```sql
+DELETE FROM users
+WHERE id = :id
 ```
 
 ### 4. Create a Service

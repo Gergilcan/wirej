@@ -178,10 +178,17 @@ public class RsqlParser {
       if (columnAnnotation != null) {
         return columnAnnotation.value()[0];
       }
+
+      var fields = entityClass.getDeclaredFields();
+      for (var innerField : fields) {
+        columnAnnotation = innerField.getAnnotation(JsonAlias.class);
+        if (columnAnnotation != null && columnAnnotation.value()[0].equals(alias)) {
+          return innerField.getName();
+        }
+      }
     } catch (NoSuchFieldException e) {
       // The alias is not a field of the entity class
-      e.printStackTrace();
-      return null;
+      return alias;
     }
 
     return columnName;

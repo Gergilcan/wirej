@@ -25,4 +25,8 @@ public class UsersService {
     public void create(User newUser) {
         userRepository.create(newUser);
     }
+
+    public void delete(Long id) {
+        userRepository.delete(new Long[] { id }); // Assuming the delete method is implemented to handle this
+    }
 }
