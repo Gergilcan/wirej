@@ -40,4 +40,9 @@ public interface UserController2 {
     @ServiceMethod("delete") // Explicitly uses "delete" method name
     @ResponseStatus(HttpStatus.NO_CONTENT)
     ResponseEntity<?> deleteUser(@PathVariable("id") Long id);
+
+    @GetMapping("/count")
+    @ServiceMethod("countByFilters")
+    @ResponseStatus(HttpStatus.OK)
+    ResponseEntity<?> countByFilters(RequestFilters filters);
 }

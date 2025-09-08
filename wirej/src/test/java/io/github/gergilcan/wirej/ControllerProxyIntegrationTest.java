@@ -73,4 +73,23 @@ class ControllerProxyIntegrationTest {
         // Act & Assert: Test the GET endpoint with @ServiceMethod (uses method name)
         mockMvc.perform(delete("/users2/201")).andExpect(status().isNoContent());
     }
+
+    @Test
+    void testProxiedControllerWithServiceMethodCountByFilters() throws Exception {
+        // Arrange: Create a user using the proxied controller
+        User user = new User();
+        user.setId(209L);
+        user.setName("Proxy User");
+
+        // Act: Test the POST endpoint with @ServiceMethod("create")
+        mockMvc.perform(post("/users2/create")
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(user)))
+                .andExpect(status().isCreated());
+
+        // Act & Assert: Test the GET endpoint with @ServiceMethod("countByFilters")
+        mockMvc.perform(get("/users2/count"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isNumber());
+    }
 }

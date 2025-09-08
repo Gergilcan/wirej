@@ -35,15 +35,17 @@ public class RepositoryInvocationHandler implements InvocationHandler {
 
         RequestFilters filters = getParameterValueFromType(method, args, RequestFilters.class);
         RequestPagination pagination = getParameterValueFromType(method, args, RequestPagination.class);
-
+        Class<?> entityClass = returnType.isArray() ? returnType.getComponentType()
+                : getParameterValueFromType(method, args, Class.class);
         var databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
-                returnType.isArray() ? returnType.getComponentType() : returnType, rsqlParser, connectionHandler);
+                entityClass, rsqlParser, connectionHandler);
 
         // Set parameters for the statement
         setStatementParameters(method, args, databaseStatement, isBatch);
 
         Object result = null;
-        if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
+        if (method.getName().startsWith("get") || method.getName().startsWith("find")
+                || method.getName().contains("count")) {
             result = handleGetRequest(returnType, databaseStatement);
         } else {
             // Execute the statement and return the result if it's not a void method
@@ -156,7 +158,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
                 || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal
                 || arg instanceof Timestamp || arg instanceof java.security.Timestamp || arg instanceof java.util.Date
-                || arg instanceof LocalDateTime) {
+                || arg instanceof LocalDateTime || arg instanceof Class) {
             return false;
         }
         // Check if the argument is a class type and not an array of primitives or
@@ -189,6 +191,12 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 }
             }
         }
+
+        // If there is no class defined use the return type of the array component type
+        if (type == Class.class) {
+            return (T) method.getReturnType();
+        }
+
         return null;
     }
 }

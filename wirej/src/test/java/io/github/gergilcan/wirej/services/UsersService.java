@@ -29,4 +29,8 @@ public class UsersService {
     public void delete(Long id) {
         userRepository.delete(new Long[] { id }); // Assuming the delete method is implemented to handle this
     }
+
+    public Long countByFilters(RequestFilters filters) {
+        return userRepository.countByFilters(filters, User.class);
+    }
 }

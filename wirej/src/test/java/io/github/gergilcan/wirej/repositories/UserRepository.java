@@ -20,6 +20,9 @@ public interface UserRepository {
     @QueryFile(value = "/queries/User/delete.sql", isBatch = true)
     void delete(@JsonAlias("id") Long[] ids);
 
+    @QueryFile("/queries/User/countByFilters.sql")
+    Long countByFilters(RequestFilters filters, Class<User> entityClass);
+
     @QueryFile("/queries/User/findByFilters.sql")
     User[] findByFilters(RequestFilters filters, RequestPagination pagination);
 }
