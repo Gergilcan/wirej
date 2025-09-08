@@ -94,6 +94,9 @@ public class RsqlParser {
       var clauseParts = clause.split(operator);
       parameterNumber.incrementAndGet();
       var value = castType(clauseParts[1]);
+      if (operator.equals(RSQLOperators.IN) || operator.equals(RSQLOperators.NOT_IN)) {
+        value = "%" + value + "%";
+      }
       statement.setParameter("filter_value_" + parameterNumber, value);
       var fieldName = findColumnNameFromAlias(clauseParts[0], entityClass);
 

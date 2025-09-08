@@ -4,6 +4,8 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 
@@ -152,7 +154,9 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         // Exclude also the Boolean, Integer, Long, and primitive types
         if (arg == null || arg.getClass().isPrimitive() || arg instanceof String ||
                 arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
-                || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal) {
+                || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal
+                || arg instanceof Timestamp || arg instanceof java.security.Timestamp || arg instanceof java.util.Date
+                || arg instanceof LocalDateTime) {
             return false;
         }
         // Check if the argument is a class type and not an array of primitives or
