@@ -92,4 +92,15 @@ class ControllerProxyIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isNumber());
     }
+
+    @Test
+    void testProxiedControllerWithServiceMethodGetGenders() throws Exception {
+        // Act & Assert: Test the GET endpoint with @ServiceMethod("countByFilters")
+        mockMvc.perform(get("/users2/genders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0]").value("Male"))
+                .andExpect(jsonPath("$[1]").value("Female"))
+                .andExpect(jsonPath("$[2]").value("Other"));
+    }
 }

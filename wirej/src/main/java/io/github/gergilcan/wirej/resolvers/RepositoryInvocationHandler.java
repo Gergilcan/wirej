@@ -44,9 +44,10 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         setStatementParameters(method, args, databaseStatement, isBatch);
 
         Object result = null;
-        if (method.getName().startsWith("get") || method.getName().startsWith("find")
-                || method.getName().contains("count")) {
+        if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
             result = handleGetRequest(returnType, databaseStatement);
+        } else if (method.getName().contains("count")) {
+            result = databaseStatement.getSingleValue();
         } else {
             // Execute the statement and return the result if it's not a void method
             if (!isBatch) {
@@ -62,6 +63,9 @@ public class RepositoryInvocationHandler implements InvocationHandler {
     private Object handleGetRequest(Class<?> returnType, DatabaseStatement<Object> databaseStatement)
             throws SQLException {
         if (returnType.isArray()) {
+            if (!isParameterAClass(returnType.getComponentType())) {
+                return databaseStatement.getSingleValueList();
+            }
             return databaseStatement.getResultList();
         } else if (returnType == Long.class || returnType == Integer.class || returnType == Boolean.class) {
             return databaseStatement.getSingleValue();
@@ -114,10 +118,10 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 continue;
             }
 
-            if (isParameterAClass(args[i])) {
-                setObjectFieldsToStatement(args[i], databaseStatement);
-            } else {
+            if (!isParameterAClass(args[i]) || method.getName().contains("count")) {
                 setSingleParameter(methodParameters[i], args[i], databaseStatement);
+            } else {
+                setObjectFieldsToStatement(args[i], databaseStatement);
             }
         }
     }
@@ -158,7 +162,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
                 || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal
                 || arg instanceof Timestamp || arg instanceof java.security.Timestamp || arg instanceof java.util.Date
-                || arg instanceof LocalDateTime || arg instanceof Class) {
+                || arg instanceof LocalDateTime) {
             return false;
         }
         // Check if the argument is a class type and not an array of primitives or

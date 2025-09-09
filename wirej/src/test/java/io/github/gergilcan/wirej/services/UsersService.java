@@ -33,4 +33,8 @@ public class UsersService {
     public Long countByFilters(RequestFilters filters) {
         return userRepository.countByFilters(filters, User.class);
     }
+
+    public String[] getGenders() {
+        return new String[] { "Male", "Female", "Other" };
+    }
 }

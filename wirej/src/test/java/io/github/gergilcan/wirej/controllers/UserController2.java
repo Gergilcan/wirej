@@ -45,4 +45,9 @@ public interface UserController2 {
     @ServiceMethod("countByFilters")
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> countByFilters(RequestFilters filters);
+
+    @GetMapping("/genders")
+    @ServiceMethod("getGenders")
+    @ResponseStatus(HttpStatus.OK)
+    ResponseEntity<?> getGenders();
 }
