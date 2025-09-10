@@ -46,7 +46,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         Object result = null;
         if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
             result = handleGetRequest(returnType, databaseStatement);
-        } else if (method.getName().contains("count")) {
+        } else if (method.getName().toLowerCase().contains("count")) {
             result = databaseStatement.getSingleValue();
         } else {
             // Execute the statement and return the result if it's not a void method
@@ -118,7 +118,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 continue;
             }
 
-            if (!isParameterAClass(args[i]) || method.getName().contains("count")) {
+            if (!isParameterAClass(args[i]) || method.getName().toLowerCase().contains("count")) {
                 setSingleParameter(methodParameters[i], args[i], databaseStatement);
             } else {
                 setObjectFieldsToStatement(args[i], databaseStatement);
