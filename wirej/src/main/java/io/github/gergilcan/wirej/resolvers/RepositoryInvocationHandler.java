@@ -156,7 +156,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         return paramName.equals("filters") || paramName.equals("pageNumber") || paramName.equals("pageSize");
     }
 
-    private boolean isParameterAClass(Object arg) {
+    private boolean isParameterANonBasicClass(Object arg) {
         // Exclude also the Boolean, Integer, Long, and primitive types
         var argClass = arg.getClass();
         if (argClass.isPrimitive() || argClass == String.class || argClass == Boolean.class || argClass == Integer.class
