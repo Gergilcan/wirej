@@ -63,7 +63,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
     private Object handleGetRequest(Class<?> returnType, DatabaseStatement<Object> databaseStatement)
             throws SQLException {
         if (returnType.isArray()) {
-            if (!isParameterAClass(returnType.getComponentType())) {
+            if (!isParameterANonBasicClass(returnType.getComponentType())) {
                 return databaseStatement.getSingleValueList();
             }
             return databaseStatement.getResultList();
@@ -118,7 +118,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 continue;
             }
 
-            if (!isParameterAClass(args[i]) || method.getName().toLowerCase().contains("count")) {
+            if (!isParameterANonBasicClass(args[i]) || method.getName().toLowerCase().contains("count")) {
                 setSingleParameter(methodParameters[i], args[i], databaseStatement);
             } else {
                 setObjectFieldsToStatement(args[i], databaseStatement);
@@ -141,7 +141,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 // If the argument is an array, we need to iterate over the array and set the
                 // parameters for each item
                 for (Object item : (Object[]) args[i]) {
-                    if (isParameterAClass(item)) {
+                    if (isParameterANonBasicClass(item)) {
                         setObjectFieldsToStatement(item, databaseStatement);
                     } else {
                         setSingleParameter(methodParameters[i], item, databaseStatement);
