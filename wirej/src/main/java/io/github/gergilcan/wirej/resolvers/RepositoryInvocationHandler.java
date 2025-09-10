@@ -158,13 +158,12 @@ public class RepositoryInvocationHandler implements InvocationHandler {
 
     private boolean isParameterANonBasicClass(Object arg) {
         // Exclude also the Boolean, Integer, Long, and primitive types
-        var argClass = arg.getClass();
-        if (argClass.isPrimitive() || argClass == String.class || argClass == Boolean.class || argClass == Integer.class
-                || argClass == Long.class || argClass == Double.class || argClass == Float.class
-                || argClass == Short.class
-                || argClass == Byte.class || argClass == BigDecimal.class || argClass == Timestamp.class
-                || argClass == java.security.Timestamp.class || argClass == java.util.Date.class
-                || argClass == LocalDateTime.class || arg instanceof String ||
+        if (arg.getClass().isPrimitive() || arg == String.class || arg == Boolean.class || arg == Integer.class
+                || arg == Long.class || arg == Double.class || arg == Float.class
+                || arg == Short.class
+                || arg == Byte.class || arg == BigDecimal.class || arg == Timestamp.class
+                || arg == java.security.Timestamp.class || arg == java.util.Date.class
+                || arg == LocalDateTime.class || arg instanceof String ||
                 arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
                 || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal
                 || arg instanceof Timestamp || arg instanceof java.security.Timestamp || arg instanceof java.util.Date
