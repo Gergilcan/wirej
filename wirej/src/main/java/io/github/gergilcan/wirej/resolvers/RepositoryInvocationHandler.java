@@ -158,7 +158,8 @@ public class RepositoryInvocationHandler implements InvocationHandler {
 
     private boolean isParameterANonBasicClass(Object arg) {
         // Exclude also the Boolean, Integer, Long, and primitive types
-        if (arg.getClass().isPrimitive() || arg == String.class || arg == Boolean.class || arg == Integer.class
+        if (arg == null || arg.getClass().isPrimitive() || arg == String.class || arg == Boolean.class
+                || arg == Integer.class
                 || arg == Long.class || arg == Double.class || arg == Float.class
                 || arg == Short.class
                 || arg == Byte.class || arg == BigDecimal.class || arg == Timestamp.class
