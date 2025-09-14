@@ -1,4 +1,4 @@
-package io.github.gergilcan.wirej.resolvers;
+package io.github.gergilcan.wirej.resolvers.controllers;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -9,14 +9,19 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 import io.github.gergilcan.wirej.annotations.ServiceMethod;
+import io.github.gergilcan.wirej.annotations.ValidatePermission;
+import io.github.gergilcan.wirej.core.security.PermissionValidator;
 
 public class ControllerInvocationHandler implements InvocationHandler {
     private final ApplicationContext applicationContext;
     private final Class<?> serviceClass;
+    private final PermissionValidator permissionValidator;
 
-    public ControllerInvocationHandler(ApplicationContext applicationContext, Class<?> serviceClass) {
+    public ControllerInvocationHandler(ApplicationContext applicationContext, Class<?> serviceClass,
+            PermissionValidator permissionValidator) {
         this.applicationContext = applicationContext;
         this.serviceClass = serviceClass;
+        this.permissionValidator = permissionValidator;
     }
 
     @Override
@@ -42,6 +47,13 @@ public class ControllerInvocationHandler implements InvocationHandler {
                     "Service method " + serviceMethodName + " not found in " + serviceClass.getName());
         }
 
+        // Invoke the validation
+        ValidatePermission validatePermission = method.getAnnotation(ValidatePermission.class);
+        if (validatePermission != null) {
+            permissionValidator.initialize(validatePermission);
+            permissionValidator.isValid(method, null); // The second parameter is not used in this context
+        }
+
         // Invoke the service method and get the result
         Object serviceResult = serviceMethod.invoke(serviceBean, args);
 
@@ -50,8 +62,8 @@ public class ControllerInvocationHandler implements InvocationHandler {
         HttpStatus status = responseStatusAnnotation != null ? responseStatusAnnotation.value() : HttpStatus.OK;
 
         // Wrap the result in a ResponseEntity
-        if (serviceMethod.getReturnType() == Void.TYPE || serviceMethod.getReturnType() == void.class) {
-            // If service method returns void, return ResponseEntity with no body
+        if (serviceMethod.getReturnType() == Void.TYPE) {
+            // If service method returns void, return ResponseEntity without body
             return ResponseEntity.status(status).build();
         } else {
             // If service method returns a value, use it as the body

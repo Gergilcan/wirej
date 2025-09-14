@@ -155,26 +155,18 @@ public class RsqlParser {
   }
 
   private String getOperator(String operator) {
-    switch (operator) {
-      case RSQLOperators.EQUAL:
-        return " = ";
-      case RSQLOperators.GREATER_THAN:
-        return " > ";
-      case RSQLOperators.GREATER_THAN_OR_EQUAL:
-        return " >= ";
-      case RSQLOperators.LESS_THAN_OR_EQUAL:
-        return " <= ";
-      case RSQLOperators.LESS_THAN:
-        return " < ";
-      default:
-        break;
-    }
+      return switch (operator) {
+          case RSQLOperators.EQUAL -> " = ";
+          case RSQLOperators.GREATER_THAN -> " > ";
+          case RSQLOperators.GREATER_THAN_OR_EQUAL -> " >= ";
+          case RSQLOperators.LESS_THAN_OR_EQUAL -> " <= ";
+          case RSQLOperators.LESS_THAN -> " < ";
+          default -> null;
+      };
 
-    return null;
   }
 
   private String findColumnNameFromAlias(String alias, Class<?> entityClass) {
-    String columnName = alias;
     try {
       var field = entityClass.getDeclaredField(alias);
       var columnAnnotation = field.getAnnotation(JsonAlias.class);
@@ -194,6 +186,6 @@ public class RsqlParser {
       return alias;
     }
 
-    return columnName;
+    return alias;
   }
 }

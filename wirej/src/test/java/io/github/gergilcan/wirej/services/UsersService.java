@@ -31,7 +31,7 @@ public class UsersService {
     }
 
     public Long countByFilters(RequestFilters filters) {
-        return userRepository.countByFilters(filters, User.class);
+        return userRepository.countByFilters(filters);
     }
 
     public String[] getGenders() {

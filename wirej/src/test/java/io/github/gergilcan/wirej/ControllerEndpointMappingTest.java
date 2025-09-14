@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.context.annotation.Import;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -23,7 +24,8 @@ import io.github.gergilcan.wirej.entities.User;
  */
 @SpringBootTest(classes = TestApplication.class)
 @DirtiesContext(classMode = ClassMode.BEFORE_EACH_TEST_METHOD)
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = true)
+@Import(TestSecurityConfig.class)
 class ControllerEndpointMappingTest {
         @Autowired
         private MockMvc mockMvc;
@@ -39,14 +41,16 @@ class ControllerEndpointMappingTest {
                 user.setName("Endpoint Test User");
 
                 // Test POST endpoint - should inherit @PostMapping("/create") from interface
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
                                 .andExpect(status().isCreated());
 
                 // Test GET endpoint - should inherit @GetMapping("/{id}") from interface
                 // and @PathVariable annotation should work correctly
-                mockMvc.perform(get("/users2/999"))
+                mockMvc.perform(get("/users/999")
+                                .header("x-auth-role", "ADMIN"))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.id").value(999))
                                 .andExpect(jsonPath("$.name").value("Endpoint Test User"));
@@ -54,7 +58,7 @@ class ControllerEndpointMappingTest {
 
         @Test
         void testControllerProxyInheritsRequestMappingFromInterface() throws Exception {
-                // The UserController2 interface has @RequestMapping("/users2")
+                // The UserController2 interface has @RequestMapping("/users")
                 // This test verifies the proxy correctly inherits this base path
 
                 User user = new User();
@@ -62,13 +66,15 @@ class ControllerEndpointMappingTest {
                 user.setName("Base Path Test");
 
                 // Create user first
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
                                 .andExpect(status().isCreated());
 
                 // Verify the base path is correctly applied
-                mockMvc.perform(get("/users2/888"))
+                mockMvc.perform(get("/users/888")
+                                .header("x-auth-role", "ADMIN"))
                                 .andExpect(status().isOk());
         }
 
@@ -80,13 +86,15 @@ class ControllerEndpointMappingTest {
                 user.setName("Annotation Inheritance Test");
 
                 // Test @RequestBody annotation inheritance
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
                                 .andExpect(status().isCreated());
 
                 // Test @PathVariable annotation inheritance
-                mockMvc.perform(get("/users2/777"))
+                mockMvc.perform(get("/users/777")
+                                .header("x-auth-role", "ADMIN"))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.id").value(777));
         }
@@ -107,24 +115,29 @@ class ControllerEndpointMappingTest {
                 user4.setId(504L);
                 user4.setName("Annotation Inheritance Test");
                 // Test @RequestBody annotation inheritance
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
                                 .andExpect(status().isCreated());
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user2)))
                                 .andExpect(status().isCreated());
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user3)))
                                 .andExpect(status().isCreated());
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user4)))
                                 .andExpect(status().isCreated());
                 // Test that the 2 first elements are returned and not more than that
-                mockMvc.perform(get("/users2/").param("pageNumber", "0").param("pageSize", "2"))
+                mockMvc.perform(get("/users/").param("pageNumber", "0").param("pageSize", "2")
+                                .header("x-auth-role", "ADMIN"))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$[0].id").value(504))
                                 .andExpect(jsonPath("$[1].id").value(503))
@@ -141,13 +154,15 @@ class ControllerEndpointMappingTest {
                 user.setName("Annotation Inheritance Test");
 
                 // Test @RequestBody annotation inheritance
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
                                 .andExpect(status().isCreated());
 
                 // Test @PathVariable annotation inheritance
-                mockMvc.perform(get("/users2/").param("filters", "id==500"))
+                mockMvc.perform(get("/users/")
+                                .header("x-auth-role", "ADMIN").param("filters", "id==500"))
                                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(500));
         }
 
@@ -159,13 +174,15 @@ class ControllerEndpointMappingTest {
                 user.setId(666L);
                 user.setName("Status Test User");
 
-                mockMvc.perform(post("/users2/create")
+                mockMvc.perform(post("/users/create")
+                                .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
                                 .andExpect(status().isCreated()); // Should return 201, not 200
 
                 // getUserById has @ResponseStatus(HttpStatus.OK)
-                mockMvc.perform(get("/users2/666"))
+                mockMvc.perform(get("/users/666")
+                                .header("x-auth-role", "ADMIN"))
                                 .andExpect(status().isOk()); // Should return 200
         }
 }

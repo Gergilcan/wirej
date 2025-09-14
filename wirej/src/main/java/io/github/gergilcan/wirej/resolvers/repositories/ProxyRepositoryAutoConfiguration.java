@@ -1,6 +1,7 @@
-package io.github.gergilcan.wirej.resolvers;
+package io.github.gergilcan.wirej.resolvers.repositories;
 
 import java.lang.reflect.Proxy;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -22,7 +23,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.stereotype.Repository;
 
-import io.github.gergilcan.wirej.database.ConnectionHandler;
 import io.github.gergilcan.wirej.rsql.RsqlParser;
 import lombok.extern.slf4j.Slf4j;
 
@@ -40,11 +40,6 @@ public class ProxyRepositoryAutoConfiguration {
     @Bean
     public static ProxyRepositoryRegistrar proxyRepositoryRegistrar() {
         return new ProxyRepositoryRegistrar();
-    }
-
-    @Bean
-    public ConnectionHandler connectionHandler(DataSource dataSource) {
-        return new ConnectionHandler(dataSource);
     }
 
     @Bean
@@ -75,7 +70,8 @@ public class ProxyRepositoryAutoConfiguration {
                     false) {
                 @Override
                 protected boolean isCandidateComponent(AnnotatedBeanDefinition beanDefinition) {
-                    return beanDefinition.getMetadata().isInterface();
+                    return beanDefinition.getMetadata().isInterface() &&
+                            !beanDefinition.getMetadata().isAnnotation();
                 }
             };
             scanner.addIncludeFilter(new AnnotationTypeFilter(Repository.class));
@@ -92,8 +88,8 @@ public class ProxyRepositoryAutoConfiguration {
                                 .genericBeanDefinition(RepositoryProxyFactoryBean.class);
                         builder.addConstructorArgValue(repositoryInterface);
                         // These dependencies will be autowired by Spring into the factory bean.
-                        // Ensure beans named 'connectionHandler' and 'rsqlParser' exist in the context.
-                        builder.addConstructorArgReference("connectionHandler");
+                        // Ensure beans named 'dataSource' and 'rsqlParser' exist in the context.
+                        builder.addConstructorArgReference("dataSource");
                         builder.addConstructorArgReference("rsqlParser");
 
                         registry.registerBeanDefinition(beanName, builder.getBeanDefinition());
@@ -116,27 +112,41 @@ public class ProxyRepositoryAutoConfiguration {
 
 class RepositoryProxyFactoryBean implements FactoryBean<Object> {
     private final Class<?> repositoryInterface;
-    private final ConnectionHandler connectionHandler;
+    private final DataSource dataSource;
     private final RsqlParser rsqlParser;
 
-    public RepositoryProxyFactoryBean(Class<?> repositoryInterface, ConnectionHandler connectionHandler,
+    public RepositoryProxyFactoryBean(Class<?> repositoryInterface, DataSource dataSource,
             RsqlParser rsqlParser) {
         this.repositoryInterface = repositoryInterface;
-        this.connectionHandler = connectionHandler;
+        this.dataSource = dataSource;
         this.rsqlParser = rsqlParser;
     }
 
     @Override
     public Object getObject() {
-        // The InvocationHandler contains the logic that runs when a repository method
-        // is called.
         RepositoryInvocationHandler handler = new RepositoryInvocationHandler(
-                connectionHandler,
-                rsqlParser);
+                dataSource,
+                rsqlParser,
+                repositoryInterface); // Pass the interface to extract generic info
+
+        // Get all interfaces in the hierarchy
+        Set<Class<?>> allInterfaces = getAllInterfaces(repositoryInterface);
+
         return Proxy.newProxyInstance(
                 repositoryInterface.getClassLoader(),
-                new Class<?>[] { repositoryInterface },
+                allInterfaces.toArray(new Class<?>[0]),
                 handler);
+    }
+
+    private Set<Class<?>> getAllInterfaces(Class<?> clazz) {
+        Set<Class<?>> interfaces = new HashSet<>();
+        if (clazz.isInterface()) {
+            interfaces.add(clazz);
+        }
+        for (Class<?> iface : clazz.getInterfaces()) {
+            interfaces.addAll(getAllInterfaces(iface));
+        }
+        return interfaces;
     }
 
     @Override

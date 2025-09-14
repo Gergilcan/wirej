@@ -6,7 +6,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-public @interface ServiceClass {
-  Class<?> value();
+@Target(ElementType.METHOD)
+public @interface QueryFile {
+  String value();
+
+  boolean isBatch() default false;
 }

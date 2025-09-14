@@ -12,21 +12,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.context.annotation.Import;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.github.gergilcan.wirej.controllers.UserController2;
+import io.github.gergilcan.wirej.controllers.UserController;
 import io.github.gergilcan.wirej.entities.User;
 
 @SpringBootTest(classes = TestApplication.class)
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = true)
+@Import(TestSecurityConfig.class)
 class ControllerProxyIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
-    private UserController2 userController2;
+    private UserController userController;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -34,7 +36,7 @@ class ControllerProxyIntegrationTest {
     @Test
     void controllerProxyIsCreatedSuccessfully() {
         // Verify that the controller proxy bean is created and injected
-        assertNotNull(userController2, "Controller proxy should be auto-configured");
+        assertNotNull(userController, "Controller proxy should be auto-configured");
     }
 
     @Test
@@ -45,13 +47,15 @@ class ControllerProxyIntegrationTest {
         user.setName("Proxy User");
 
         // Act: Test the POST endpoint with @ServiceMethod("create")
-        mockMvc.perform(post("/users2/create")
+        mockMvc.perform(post("/users/create")
                 .contentType("application/json")
+                .header("x-auth-role", "ADMIN")
                 .content(objectMapper.writeValueAsString(user)))
                 .andExpect(status().isCreated());
 
         // Act & Assert: Test the GET endpoint with @ServiceMethod (uses method name)
-        mockMvc.perform(get("/users2/201"))
+        mockMvc.perform(get("/users/201")
+                .header("x-auth-role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(201))
                 .andExpect(jsonPath("$.name").value("Proxy User"));
@@ -65,13 +69,15 @@ class ControllerProxyIntegrationTest {
         user.setName("Proxy User");
 
         // Act: Test the POST endpoint with @ServiceMethod("create")
-        mockMvc.perform(post("/users2/create")
+        mockMvc.perform(post("/users/create")
+                .header("x-auth-role", "ADMIN")
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(user)))
                 .andExpect(status().isCreated());
 
         // Act & Assert: Test the GET endpoint with @ServiceMethod (uses method name)
-        mockMvc.perform(delete("/users2/201")).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/users/201")
+                .header("x-auth-role", "ADMIN")).andExpect(status().isNoContent());
     }
 
     @Test
@@ -82,13 +88,15 @@ class ControllerProxyIntegrationTest {
         user.setName("Proxy User");
 
         // Act: Test the POST endpoint with @ServiceMethod("create")
-        mockMvc.perform(post("/users2/create")
+        mockMvc.perform(post("/users/create")
+                .header("x-auth-role", "ADMIN")
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(user)))
                 .andExpect(status().isCreated());
 
         // Act & Assert: Test the GET endpoint with @ServiceMethod("countByFilters")
-        mockMvc.perform(get("/users2/count"))
+        mockMvc.perform(get("/users/count")
+                .header("x-auth-role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isNumber());
     }
@@ -96,7 +104,8 @@ class ControllerProxyIntegrationTest {
     @Test
     void testProxiedControllerWithServiceMethodGetGenders() throws Exception {
         // Act & Assert: Test the GET endpoint with @ServiceMethod("countByFilters")
-        mockMvc.perform(get("/users2/genders"))
+        mockMvc.perform(get("/users/genders")
+                .header("x-auth-role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[0]").value("Male"))

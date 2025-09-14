@@ -1,4 +1,4 @@
-package io.github.gergilcan.wirej.resolvers;
+package io.github.gergilcan.wirej.resolvers.controllers;
 
 import java.util.Set;
 import java.util.List;
@@ -12,7 +12,6 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
@@ -21,11 +20,10 @@ import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.github.gergilcan.wirej.annotations.ServiceClass;
-import io.github.gergilcan.wirej.config.WireJConfiguration;
+import io.github.gergilcan.wirej.core.security.PermissionValidator;
 import lombok.extern.slf4j.Slf4j;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(WireJConfiguration.class)
 @Slf4j
 public class ProxyControllerAutoConfiguration implements BeanDefinitionRegistryPostProcessor {
 
@@ -55,7 +53,7 @@ public class ProxyControllerAutoConfiguration implements BeanDefinitionRegistryP
 
                     // Check annotation names
                     boolean hasServiceClass = java.util.Arrays.stream(clazz.getDeclaredAnnotations())
-                            .anyMatch(ann -> ann instanceof io.github.gergilcan.wirej.annotations.ServiceClass);
+                            .anyMatch(ServiceClass.class::isInstance);
 
                     log.debug(
                             "Checking candidate: {} - Interface: {}, RestController: {}, ServiceClass: {} (direct check)",
@@ -132,11 +130,14 @@ public class ProxyControllerAutoConfiguration implements BeanDefinitionRegistryP
     public static class ControllerProxyFactoryBean implements FactoryBean<Object>, ApplicationContextAware {
         private final Class<?> controllerInterface;
         private final Class<?> serviceClass;
+        private final PermissionValidator permissionValidator;
         private ApplicationContext applicationContext;
 
-        public ControllerProxyFactoryBean(Class<?> controllerInterface, Class<?> serviceClass) {
+        public ControllerProxyFactoryBean(Class<?> controllerInterface, Class<?> serviceClass,
+                PermissionValidator permissionValidator) {
             this.controllerInterface = controllerInterface;
             this.serviceClass = serviceClass;
+            this.permissionValidator = permissionValidator;
         }
 
         @Override
@@ -149,7 +150,7 @@ public class ProxyControllerAutoConfiguration implements BeanDefinitionRegistryP
             return java.lang.reflect.Proxy.newProxyInstance(
                     controllerInterface.getClassLoader(),
                     new Class<?>[] { controllerInterface },
-                    new ControllerInvocationHandler(applicationContext, serviceClass));
+                    new ControllerInvocationHandler(applicationContext, serviceClass, permissionValidator));
         }
 
         @Override

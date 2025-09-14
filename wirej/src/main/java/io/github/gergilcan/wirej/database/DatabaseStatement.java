@@ -12,6 +12,8 @@ import java.util.LinkedList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.sql.DataSource;
+
 import io.github.gergilcan.PostgreSQLmapper.core.PostgresEntityMapper;
 import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
@@ -22,9 +24,9 @@ import lombok.extern.slf4j.Slf4j;
 // nosemgrep
 @Slf4j
 @SuppressWarnings("unchecked")
-public class DatabaseStatement<T> {
+public class DatabaseStatement<T> implements AutoCloseable {
   private static final String EXECUTING_QUERY_DEBUG_TEXT = "Executing query: ";
-  private Class<?> entityClass;
+  private final Class<?> entityClass;
   private Connection connection;
 
   @Getter
@@ -33,17 +35,13 @@ public class DatabaseStatement<T> {
 
   private PreparedStatement batchStatement;
 
-  private HashMap<String, Object> parameters = new HashMap<>();
-  private LinkedList<String> statementParameters = new LinkedList<>();
-  private PostgresEntityMapper entityMapper = new PostgresEntityMapper();
-  private long startTime;
-  private String fileName;
+  private final HashMap<String, Object> parameters = new HashMap<>();
+  private final LinkedList<String> statementParameters = new LinkedList<>();
+  private final PostgresEntityMapper entityMapper = new PostgresEntityMapper();
+  private final long startTime;
+  private final String fileName;
 
-  public DatabaseStatement(String fileName, ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, null, connectionHandler);
-  }
-
-  public DatabaseStatement(String fileName, Class<?> entityClass, ConnectionHandler connectionHandler)
+  public DatabaseStatement(String fileName, Class<?> entityClass, DataSource dataSource)
       throws IOException, SQLException {
     this.fileName = fileName;
     this.entityClass = entityClass;
@@ -56,24 +54,17 @@ public class DatabaseStatement<T> {
       }
 
       originalQuery = new String(file.readAllBytes());
-      connection = connectionHandler.getConnection();
+      connection = dataSource.getConnection();
       log.debug("Statement and connection created: executed in {}ms", System.currentTimeMillis() - startTime);
+    } catch (Exception e) {
+      close();
+      throw e;
     }
   }
 
-  public DatabaseStatement(String fileName, RequestFilters filters, Class<?> entityClass,
-      ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, filters, null, entityClass, null, connectionHandler);
-  }
-
-  public DatabaseStatement(String fileName, RequestFilters filters, Class<?> entityClass, RsqlParser parser,
-      ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, filters, null, entityClass, parser, connectionHandler);
-  }
-
   public DatabaseStatement(String fileName, RequestFilters filters, RequestPagination pagination,
-      Class<?> entityClass, RsqlParser parser, ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, entityClass, connectionHandler);
+      Class<?> entityClass, RsqlParser parser, DataSource dataSource) throws IOException, SQLException {
+    this(fileName, entityClass, dataSource);
 
     if (pagination != null) {
       setParameter("initialPosition", pagination.getPageNumber() * pagination.getPageSize());
@@ -96,34 +87,26 @@ public class DatabaseStatement<T> {
   }
 
   public T getResult() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
-    replaceParameters();
+      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+      replaceParameters();
     try (var statement = connection.prepareStatement(finalQuery)) {
       setStatementParameters(statement);
       var rs = statement.executeQuery();
       var results = (T[]) entityMapper.map(rs, entityClass.arrayType());
       return results.length > 0 ? results[0] : null;
-    } finally {
-      close();
     }
   }
 
   public T[] getResultList() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
+      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
     var start = System.currentTimeMillis();
     try (var statement = connection.prepareStatement(finalQuery)) {
-      log.debug("Prepare statement: executed in " + (System.currentTimeMillis() - start) + "ms");
-      start = System.currentTimeMillis();
       setStatementParameters(statement);
-      log.debug("Set statement parameters: executed in " + (System.currentTimeMillis() - start) + "ms");
-      start = System.currentTimeMillis();
       var rs = statement.executeQuery();
-      log.debug("Execute query: executed in " + (System.currentTimeMillis() - start) + "ms");
-      start = System.currentTimeMillis();
+      log.debug("Prepare statement: executed in {}ms", System.currentTimeMillis() - start);
+      log.debug("Set statement parameters: executed in {}ms", System.currentTimeMillis() - start);
       return (T[]) entityMapper.map(rs, entityClass.arrayType());
-    } finally {
-      close();
     }
   }
 
@@ -132,13 +115,11 @@ public class DatabaseStatement<T> {
   }
 
   public boolean execute() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
+      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
     try (var statement = connection.prepareStatement(finalQuery)) {
       setStatementParameters(statement);
       return statement.execute();
-    } finally {
-      close();
     }
   }
 
@@ -152,52 +133,27 @@ public class DatabaseStatement<T> {
   }
 
   public T[] executeBatch() throws SQLException {
-    try {
-      if (batchStatement != null) {
-        log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
-        batchStatement.executeBatch();
-        if (entityClass != null && entityClass != Void.TYPE) {
-          return (T[]) entityMapper.map(batchStatement.getGeneratedKeys(), entityClass.arrayType());
-        }
+    if (batchStatement != null) {
+        log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+      batchStatement.executeBatch();
+      if (entityClass != null && entityClass != Void.TYPE) {
+        return (T[]) entityMapper.map(batchStatement.getGeneratedKeys(), entityClass.arrayType());
       }
-    } finally {
-      if (batchStatement != null) {
-        batchStatement.close();
-      }
-      close();
     }
-
     if (entityClass != null && entityClass != Void.TYPE) {
       return (T[]) Array.newInstance(entityClass, 0);
     }
-
     return null;
-  }
-
-  private void close() throws SQLException {
-    connection.close();
-    log.debug("Query: " + fileName + " executed in " + (System.currentTimeMillis() - startTime) + "ms");
-  }
-
-  public void closeStatement() throws SQLException {
-    if (batchStatement != null) {
-      batchStatement.close();
-      batchStatement = null;
-    }
-    if (connection != null && !connection.isClosed()) {
-      connection.close();
-      connection = null;
-    }
   }
 
   private void replaceParameters() {
     var temporalQuery = originalQuery;
-    Pattern pattern = Pattern.compile(":\\w*");
+    Pattern pattern = Pattern.compile("(?<!:):\\w+");
     Matcher matcher = pattern.matcher(originalQuery);
     while (matcher.find()) {
-      var parameterName = matcher.group().replace(":", "");
+      var parameterName = matcher.group().substring(1); // remove leading :
       statementParameters.add(parameterName);
-      temporalQuery = temporalQuery.replaceAll(matcher.group() + "\\b", "?");
+      temporalQuery = temporalQuery.replaceAll(Pattern.quote(matcher.group()) + "\\b", "?");
     }
     finalQuery = temporalQuery;
   }
@@ -205,40 +161,59 @@ public class DatabaseStatement<T> {
   private void setStatementParameters(PreparedStatement statement) throws SQLException {
     for (int i = 0; i < statementParameters.size(); i++) {
       var parameterName = statementParameters.get(i);
+      if (!parameters.containsKey(parameterName)) {
+        throw new SQLException("Missing parameter: " + parameterName);
+      }
       statement.setObject(i + 1, parameters.get(parameterName));
     }
   }
 
   public T getSingleValue() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
+      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
-
-    try (var statement = connection.prepareStatement(finalQuery)) {
+    try (var statement = connection.prepareStatement(finalQuery);
+        var rs = statement.executeQuery()) {
       setStatementParameters(statement);
-      var rs = statement.executeQuery();
-      rs.next();
-      return (T) rs.getObject(1);
-    } finally {
-      close();
+      if (rs.next()) {
+        return (T) rs.getObject(1);
+      }
+      return null;
     }
   }
 
   public T[] getSingleValueList() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
+      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
-    try (var statement = connection.prepareStatement(finalQuery)) {
+    var list = new ArrayList<T>();
+    try (var statement = connection.prepareStatement(finalQuery);
+        var rs = statement.executeQuery()) {
       setStatementParameters(statement);
-      var list = new ArrayList<T>();
-      var rs = statement.executeQuery();
       while (rs.next()) {
         list.add((T) rs.getObject(1));
       }
-      return list.toArray((T[]) Array.newInstance(entityClass, 0));
-    } catch (SQLException e) {
-      return (T[]) Array.newInstance(entityClass, 0);
-    } finally {
-      close();
     }
+    return list.toArray((T[]) Array.newInstance(entityClass, 0));
+  }
 
+  @Override
+  public void close() {
+    try {
+      if (batchStatement != null) {
+        batchStatement.clearBatch();
+        batchStatement.close();
+        batchStatement = null;
+      }
+    } catch (SQLException e) {
+      log.warn("Error closing batchStatement", e);
+    }
+    try {
+      if (connection != null && !connection.isClosed()) {
+        connection.close();
+        connection = null;
+      }
+    } catch (SQLException e) {
+      log.warn("Error closing connection", e);
+    }
+    log.debug("Query: {} executed in {}ms", fileName, System.currentTimeMillis() - startTime);
   }
 }

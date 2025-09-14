@@ -1,0 +1,8 @@
+Participant:
+  - User: READ
+Coach:
+  - User: READ, WRITE
+Coach Coordinator:
+  - User: READ, WRITE, DELETE
+Admin:
+  - User: READ, WRITE, DELETE

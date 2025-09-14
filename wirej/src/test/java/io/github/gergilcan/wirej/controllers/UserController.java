@@ -13,36 +13,43 @@ import org.springframework.http.HttpStatus;
 
 import io.github.gergilcan.wirej.annotations.ServiceClass;
 import io.github.gergilcan.wirej.annotations.ServiceMethod;
+import io.github.gergilcan.wirej.annotations.ValidatePermission;
 import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
+import io.github.gergilcan.wirej.core.security.RbacPermissions;
 import io.github.gergilcan.wirej.entities.User;
 import io.github.gergilcan.wirej.services.UsersService;
 
 @RestController
-@RequestMapping("/users2")
+@RequestMapping("/users")
 @ServiceClass(UsersService.class)
-public interface UserController2 {
+public interface UserController {
     @GetMapping("/{id}")
     @ServiceMethod // Will automatically use "getUserById" method name
     @ResponseStatus(HttpStatus.OK)
+    @ValidatePermission(RbacPermissions.READ)
     ResponseEntity<?> getUserById(@PathVariable("id") Long id);
 
     @GetMapping("/")
     @ServiceMethod
+    @ValidatePermission(RbacPermissions.READ)
     public ResponseEntity<?> getFiltered(RequestFilters filters, RequestPagination pagination);
 
     @PostMapping("/create")
     @ServiceMethod("create") // Explicitly uses "create" method name
+    @ValidatePermission(RbacPermissions.WRITE)
     @ResponseStatus(HttpStatus.CREATED)
     ResponseEntity<?> createUser(@RequestBody User newUser);
 
     @DeleteMapping("/{id}")
     @ServiceMethod("delete") // Explicitly uses "delete" method name
+    @ValidatePermission(RbacPermissions.DELETE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     ResponseEntity<?> deleteUser(@PathVariable("id") Long id);
 
     @GetMapping("/count")
     @ServiceMethod("countByFilters")
+    @ValidatePermission(RbacPermissions.READ)
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> countByFilters(RequestFilters filters);
 

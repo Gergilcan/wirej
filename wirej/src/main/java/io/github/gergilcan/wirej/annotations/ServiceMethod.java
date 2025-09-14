@@ -6,18 +6,16 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation to mark a method in a controller interface that should be proxied
- * to a service method. The proxy will call the specified method on the service
- * class defined by @ServiceClass.
+ * An annotation to link a controller method to a service method by name.
+ * If no value is provided, the annotated method name will be used
+ * automatically.
  */
-@Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
 public @interface ServiceMethod {
-    /**
-     * The name of the method to call on the service class.
-     * If not specified, uses the annotated method's name.
-     * 
-     * @return the service method name
-     */
-    String value() default "";
+  /**
+   * The name of the service method to call.
+   * If empty, the annotated method name will be used automatically.
+   */
+  String value() default "";
 }

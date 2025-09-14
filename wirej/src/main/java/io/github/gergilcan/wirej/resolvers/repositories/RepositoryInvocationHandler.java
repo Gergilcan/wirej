@@ -1,60 +1,83 @@
-package io.github.gergilcan.wirej.resolvers;
+package io.github.gergilcan.wirej.resolvers.repositories;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+
+import javax.sql.DataSource;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 
 import io.github.gergilcan.wirej.annotations.QueryFile;
 import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
-import io.github.gergilcan.wirej.database.ConnectionHandler;
 import io.github.gergilcan.wirej.database.DatabaseStatement;
 import io.github.gergilcan.wirej.rsql.RsqlParser;
 
 public class RepositoryInvocationHandler implements InvocationHandler {
-    private final ConnectionHandler connectionHandler;
+    private final DataSource dataSource;
     private final RsqlParser rsqlParser;
+    private final Class<?> entityClass;
 
-    public RepositoryInvocationHandler(ConnectionHandler connectionHandler, RsqlParser rsqlParser) {
-        this.connectionHandler = connectionHandler;
+    public RepositoryInvocationHandler(DataSource dataSource, RsqlParser rsqlParser, Class<?> repositoryInterface) {
+        this.dataSource = dataSource;
         this.rsqlParser = rsqlParser;
+        this.entityClass = extractEntityClass(repositoryInterface);
+    }
+
+    private Class<?> extractEntityClass(Class<?> repositoryInterface) {
+        // Look for generic interfaces like CrudRepository<User>
+        Type[] genericInterfaces = repositoryInterface.getGenericInterfaces();
+        for (Type genericInterface : genericInterfaces) {
+            if (genericInterface instanceof ParameterizedType paramType) {
+                Type[] actualTypes = paramType.getActualTypeArguments();
+                if (actualTypes.length > 0 && actualTypes[0] instanceof Class) {
+                    return (Class<?>) actualTypes[0];
+                }
+            }
+        }
+        return Object.class; // Fallback if not found
     }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         // Empty implementation - you handle it yourself
-        // connectionHandler and rsqlParser are available here
+        // dataSource and rsqlParser are available here
         var returnType = method.getReturnType();
-        var fileName = method.getAnnotation(QueryFile.class).value();
-        var isBatch = method.getAnnotation(QueryFile.class).isBatch();
-
-        RequestFilters filters = getParameterValueFromType(method, args, RequestFilters.class);
-        RequestPagination pagination = getParameterValueFromType(method, args, RequestPagination.class);
-        Class<?> entityClass = returnType.isArray() ? returnType.getComponentType()
-                : getParameterValueFromType(method, args, Class.class);
-        var databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
-                entityClass, rsqlParser, connectionHandler);
-
-        // Set parameters for the statement
-        setStatementParameters(method, args, databaseStatement, isBatch);
-
         Object result = null;
-        if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
-            result = handleGetRequest(returnType, databaseStatement);
-        } else if (method.getName().toLowerCase().contains("count")) {
-            result = databaseStatement.getSingleValue();
-        } else {
-            // Execute the statement and return the result if it's not a void method
-            if (!isBatch) {
-                result = method.getReturnType() == Void.TYPE ? databaseStatement.execute()
-                        : databaseStatement.getResult();
-            } else {
-                result = databaseStatement.executeBatch();
+        QueryFile queryFile = method.getAnnotation(QueryFile.class);
+        if (queryFile != null) {
+            var fileName = method.getAnnotation(QueryFile.class).value().replace("{entity}",
+                    entityClass.getSimpleName());
+            var isBatch = method.getAnnotation(QueryFile.class).isBatch();
+
+            RequestFilters filters = getParameterValueFromType(method, args, RequestFilters.class);
+            RequestPagination pagination = getParameterValueFromType(method, args, RequestPagination.class);
+            try (var databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
+                    entityClass, rsqlParser, dataSource)) {
+
+                // Set parameters for the statement
+                setStatementParameters(method, args, databaseStatement, isBatch);
+
+                if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
+                    result = handleGetRequest(returnType, databaseStatement);
+                } else if (method.getName().toLowerCase().contains("count")) {
+                    result = databaseStatement.getSingleValue();
+                } else {
+                    // Execute the statement and return the result if it's not a void method
+                    if (!isBatch) {
+                        result = method.getReturnType() == Void.TYPE ? databaseStatement.execute()
+                                : databaseStatement.getResult();
+                    } else {
+                        result = databaseStatement.executeBatch();
+                    }
+                }
             }
         }
         return result;
@@ -113,8 +136,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
             return;
         }
         for (int i = 0; i < args.length; i++) {
-            String paramName = methodParameters[i].getName();
-            if (shouldSkipParameter(paramName)) {
+            if (shouldSkipParameter(methodParameters[i])) {
                 continue;
             }
 
@@ -133,8 +155,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
             return;
         }
         for (int i = 0; i < args.length; i++) {
-            String paramName = methodParameters[i].getName();
-            if (shouldSkipParameter(paramName)) {
+            if (shouldSkipParameter(methodParameters[i])) {
                 continue;
             }
             if (args[i].getClass().isArray()) {
@@ -152,8 +173,8 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         }
     }
 
-    private boolean shouldSkipParameter(String paramName) {
-        return paramName.equals("filters") || paramName.equals("pageNumber") || paramName.equals("pageSize");
+    private boolean shouldSkipParameter(Parameter parameter) {
+        return parameter.getType() == RequestFilters.class || parameter.getType() == RequestPagination.class;
     }
 
     private boolean isParameterANonBasicClass(Object arg) {
