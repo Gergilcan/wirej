@@ -5,16 +5,13 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.math.BigDecimal;
 import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-
 import javax.sql.DataSource;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 
 import io.github.gergilcan.wirej.annotations.QueryFile;
+import io.github.gergilcan.wirej.core.ClassHelpers;
 import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
 import io.github.gergilcan.wirej.database.DatabaseStatement;
@@ -86,7 +83,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
     private Object handleGetRequest(Class<?> returnType, DatabaseStatement<Object> databaseStatement)
             throws SQLException {
         if (returnType.isArray()) {
-            if (!isParameterANonBasicClass(returnType.getComponentType())) {
+            if (!ClassHelpers.isCustomObject(returnType.getComponentType())) {
                 return databaseStatement.getSingleValueList();
             }
             return databaseStatement.getResultList();
@@ -140,7 +137,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 continue;
             }
 
-            if (!isParameterANonBasicClass(args[i]) || method.getName().toLowerCase().contains("count")) {
+            if (!ClassHelpers.isCustomObject(args[i].getClass()) || method.getName().toLowerCase().contains("count")) {
                 setSingleParameter(methodParameters[i], args[i], databaseStatement);
             } else {
                 setObjectFieldsToStatement(args[i], databaseStatement);
@@ -162,7 +159,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 // If the argument is an array, we need to iterate over the array and set the
                 // parameters for each item
                 for (Object item : (Object[]) args[i]) {
-                    if (isParameterANonBasicClass(item)) {
+                    if (ClassHelpers.isCustomObject(item.getClass())) {
                         setObjectFieldsToStatement(item, databaseStatement);
                     } else {
                         setSingleParameter(methodParameters[i], item, databaseStatement);
@@ -175,31 +172,6 @@ public class RepositoryInvocationHandler implements InvocationHandler {
 
     private boolean shouldSkipParameter(Parameter parameter) {
         return parameter.getType() == RequestFilters.class || parameter.getType() == RequestPagination.class;
-    }
-
-    private boolean isParameterANonBasicClass(Object arg) {
-        // Exclude also the Boolean, Integer, Long, and primitive types
-        if (arg == null || arg.getClass().isPrimitive() || arg == String.class || arg == Boolean.class
-                || arg == Integer.class
-                || arg == Long.class || arg == Double.class || arg == Float.class
-                || arg == Short.class
-                || arg == Byte.class || arg == BigDecimal.class || arg == Timestamp.class
-                || arg == java.security.Timestamp.class || arg == java.util.Date.class
-                || arg == LocalDateTime.class || arg instanceof String ||
-                arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
-                || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal
-                || arg instanceof Timestamp || arg instanceof java.security.Timestamp || arg instanceof java.util.Date
-                || arg instanceof LocalDateTime) {
-            return false;
-        }
-        // Check if the argument is a class type and not an array of primitives or
-        // arrays
-        if (arg.getClass().isArray() && (arg.getClass().getComponentType().isPrimitive()
-                || arg.getClass().getComponentType() == String.class)) {
-            return false;
-        }
-
-        return true;
     }
 
     private void setSingleParameter(java.lang.reflect.Parameter parameter, Object arg,

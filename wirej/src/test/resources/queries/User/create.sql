@@ -1,4 +1,4 @@
 INSERT INTO
-    users (id, name)
+    users (name)
 VALUES
-    (:id, :name)
+    (:name)

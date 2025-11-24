@@ -12,4 +12,7 @@ import io.github.gergilcan.wirej.entities.User;
 public interface UserRepository extends PagedCrudRepository<User> {
     @QueryFile(value = "/queries/User/delete.sql", isBatch = true)
     void delete(@JsonAlias("id") Long[] ids);
+
+    @QueryFile("/queries/User/createBySpecificId.sql")
+    void create(Long specificId, User newUser);
 }

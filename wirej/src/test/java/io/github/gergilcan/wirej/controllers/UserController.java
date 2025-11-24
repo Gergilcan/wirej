@@ -41,6 +41,12 @@ public interface UserController {
     @ResponseStatus(HttpStatus.CREATED)
     ResponseEntity<?> createUser(@RequestBody User newUser);
 
+    @PostMapping("/create/{userId}")
+    @ServiceMethod("createUserWithId") // Explicitly uses "create" method name
+    @ValidatePermission(RbacPermissions.WRITE)
+    @ResponseStatus(HttpStatus.CREATED)
+    ResponseEntity<?> createUserWithId(@PathVariable Long userId, @RequestBody User newUser);
+
     @DeleteMapping("/{id}")
     @ServiceMethod("delete") // Explicitly uses "delete" method name
     @ValidatePermission(RbacPermissions.DELETE)

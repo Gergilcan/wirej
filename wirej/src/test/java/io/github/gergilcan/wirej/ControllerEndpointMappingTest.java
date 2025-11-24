@@ -37,11 +37,10 @@ class ControllerEndpointMappingTest {
         void testProxyControllerHandlesHttpEndpointsWithAnnotationInheritance() throws Exception {
                 // Create a test user
                 User user = new User();
-                user.setId(999L);
                 user.setName("Endpoint Test User");
 
                 // Test POST endpoint - should inherit @PostMapping("/create") from interface
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/999")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
@@ -62,11 +61,10 @@ class ControllerEndpointMappingTest {
                 // This test verifies the proxy correctly inherits this base path
 
                 User user = new User();
-                user.setId(888L);
                 user.setName("Base Path Test");
 
                 // Create user first
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/888")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
@@ -82,11 +80,10 @@ class ControllerEndpointMappingTest {
         void testParameterAnnotationsAreInherited() throws Exception {
                 // Test that @PathVariable, @RequestBody annotations are properly inherited
                 User user = new User();
-                user.setId(777L);
                 user.setName("Annotation Inheritance Test");
 
                 // Test @RequestBody annotation inheritance
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/777")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
@@ -103,34 +100,30 @@ class ControllerEndpointMappingTest {
         void testParameterAnnotationsAreInheritedWithPagination() throws Exception {
                 // Test that @PathVariable, @RequestBody annotations are properly inherited
                 User user = new User();
-                user.setId(501L);
                 user.setName("Annotation Inheritance Test");
                 User user2 = new User();
-                user2.setId(502L);
                 user2.setName("Annotation Inheritance Test");
                 User user3 = new User();
-                user3.setId(503L);
                 user3.setName("Annotation Inheritance Test");
                 User user4 = new User();
-                user4.setId(504L);
                 user4.setName("Annotation Inheritance Test");
                 // Test @RequestBody annotation inheritance
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/501")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
                                 .andExpect(status().isCreated());
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/502")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user2)))
                                 .andExpect(status().isCreated());
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/503")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user3)))
                                 .andExpect(status().isCreated());
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/504")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user4)))
@@ -154,7 +147,7 @@ class ControllerEndpointMappingTest {
                 user.setName("Annotation Inheritance Test");
 
                 // Test @RequestBody annotation inheritance
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/500")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
@@ -174,7 +167,7 @@ class ControllerEndpointMappingTest {
                 user.setId(666L);
                 user.setName("Status Test User");
 
-                mockMvc.perform(post("/users/create")
+                mockMvc.perform(post("/users/create/666")
                                 .header("x-auth-role", "ADMIN")
                                 .contentType("application/json")
                                 .content(objectMapper.writeValueAsString(user)))
@@ -184,5 +177,25 @@ class ControllerEndpointMappingTest {
                 mockMvc.perform(get("/users/666")
                                 .header("x-auth-role", "ADMIN"))
                                 .andExpect(status().isOk()); // Should return 200
+        }
+
+        @Test
+        void testCountValueForFilteredRequest() throws Exception {
+                // UserController2.createUser() has @ResponseStatus(HttpStatus.CREATED)
+                // Verify this annotation is properly inherited by the proxy
+                User user = new User();
+                user.setName("Count Test User");
+
+                mockMvc.perform(post("/users/create/665")
+                                .header("x-auth-role", "ADMIN")
+                                .contentType("application/json")
+                                .content(objectMapper.writeValueAsString(user)))
+                                .andExpect(status().isCreated()); // Should return 201, not 200
+
+                // countByFilters has @ResponseStatus(HttpStatus.OK)
+                mockMvc.perform(get("/users/count").param("filters", "name==Count Test User").header("x-auth-role",
+                                "ADMIN"))
+                                .andExpect(status().isOk()) // Should return 200
+                                .andExpect(jsonPath("$").value(1));
         }
 }

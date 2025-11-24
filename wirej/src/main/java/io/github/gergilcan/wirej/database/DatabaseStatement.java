@@ -87,8 +87,8 @@ public class DatabaseStatement<T> implements AutoCloseable {
   }
 
   public T getResult() throws SQLException {
-      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
-      replaceParameters();
+    log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+    replaceParameters();
     try (var statement = connection.prepareStatement(finalQuery)) {
       setStatementParameters(statement);
       var rs = statement.executeQuery();
@@ -98,7 +98,7 @@ public class DatabaseStatement<T> implements AutoCloseable {
   }
 
   public T[] getResultList() throws SQLException {
-      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+    log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
     var start = System.currentTimeMillis();
     try (var statement = connection.prepareStatement(finalQuery)) {
@@ -111,11 +111,14 @@ public class DatabaseStatement<T> implements AutoCloseable {
   }
 
   public void setParameter(String name, Object param) {
+    if (parameters.containsKey(name)) {
+      throw new IllegalArgumentException("Parameter " + name + " is already set.");
+    }
     parameters.put(name, param);
   }
 
   public boolean execute() throws SQLException {
-      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+    log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
     try (var statement = connection.prepareStatement(finalQuery)) {
       setStatementParameters(statement);
@@ -134,7 +137,7 @@ public class DatabaseStatement<T> implements AutoCloseable {
 
   public T[] executeBatch() throws SQLException {
     if (batchStatement != null) {
-        log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
       batchStatement.executeBatch();
       if (entityClass != null && entityClass != Void.TYPE) {
         return (T[]) entityMapper.map(batchStatement.getGeneratedKeys(), entityClass.arrayType());
@@ -169,20 +172,21 @@ public class DatabaseStatement<T> implements AutoCloseable {
   }
 
   public T getSingleValue() throws SQLException {
-      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+    log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
-    try (var statement = connection.prepareStatement(finalQuery);
-        var rs = statement.executeQuery()) {
+    try (var statement = connection.prepareStatement(finalQuery)) {
       setStatementParameters(statement);
+      var rs = statement.executeQuery();
       if (rs.next()) {
         return (T) rs.getObject(1);
       }
       return null;
     }
+
   }
 
   public T[] getSingleValueList() throws SQLException {
-      log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
+    log.debug(EXECUTING_QUERY_DEBUG_TEXT + "{}", fileName);
     replaceParameters();
     var list = new ArrayList<T>();
     try (var statement = connection.prepareStatement(finalQuery);
