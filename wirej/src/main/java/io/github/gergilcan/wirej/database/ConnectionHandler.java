@@ -20,4 +20,16 @@ public class ConnectionHandler {
 		log.debug("Connection obtained: {}", connection);
 		return connection;
 	}
+
+	/**
+	 * Releases a connection obtained from {@link #getConnection()}. Uses
+	 * {@link DataSourceUtils#releaseConnection} so that a connection bound to an
+	 * active Spring-managed transaction is left open for the transaction, and a
+	 * standalone connection is returned to the pool. Calling
+	 * {@code connection.close()} directly would close a transaction's connection
+	 * prematurely.
+	 */
+	public void releaseConnection(Connection connection) {
+		DataSourceUtils.releaseConnection(connection, dataSource);
+	}
 }

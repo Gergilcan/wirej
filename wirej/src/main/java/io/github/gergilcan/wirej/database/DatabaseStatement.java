@@ -9,6 +9,8 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,6 +40,14 @@ public class DatabaseStatement<T> {
   private PostgresEntityMapper entityMapper = new PostgresEntityMapper();
   private long startTime;
   private String fileName;
+  private ConnectionHandler connectionHandler;
+
+  // Query text is identical for every call, so read each .sql file from the
+  // classpath once and reuse it. Avoids re-reading (and re-allocating) on every
+  // query, and removes a source of flaky "File not found" errors when the
+  // classpath resource is momentarily unavailable (e.g. target/classes being
+  // rewritten by a concurrent build).
+  private static final Map<String, String> QUERY_CACHE = new ConcurrentHashMap<>();
 
   public DatabaseStatement(String fileName, ConnectionHandler connectionHandler) throws IOException, SQLException {
     this(fileName, null, connectionHandler);
@@ -47,17 +57,28 @@ public class DatabaseStatement<T> {
       throws IOException, SQLException {
     this.fileName = fileName;
     this.entityClass = entityClass;
+    this.connectionHandler = connectionHandler;
 
-    try (var file = getClass().getResourceAsStream(fileName)) {
-      startTime = System.currentTimeMillis();
+    startTime = System.currentTimeMillis();
+    originalQuery = loadQuery(fileName);
+    connection = connectionHandler.getConnection();
+    log.debug("Statement and connection created: executed in {}ms", System.currentTimeMillis() - startTime);
+  }
 
+  // Reads the SQL for fileName from the classpath, caching it after the first
+  // successful read so subsequent calls never touch the filesystem.
+  private static String loadQuery(String fileName) throws IOException {
+    var cached = QUERY_CACHE.get(fileName);
+    if (cached != null) {
+      return cached;
+    }
+    try (var file = DatabaseStatement.class.getResourceAsStream(fileName)) {
       if (file == null) {
         throw new IOException("File not found: " + fileName);
       }
-
-      originalQuery = new String(file.readAllBytes());
-      connection = connectionHandler.getConnection();
-      log.debug("Statement and connection created: executed in {}ms", System.currentTimeMillis() - startTime);
+      var query = new String(file.readAllBytes());
+      QUERY_CACHE.put(fileName, query);
+      return query;
     }
   }
 
@@ -175,7 +196,7 @@ public class DatabaseStatement<T> {
   }
 
   private void close() throws SQLException {
-    connection.close();
+    connectionHandler.releaseConnection(connection);
     log.debug("Query: " + fileName + " executed in " + (System.currentTimeMillis() - startTime) + "ms");
   }
 
@@ -184,8 +205,8 @@ public class DatabaseStatement<T> {
       batchStatement.close();
       batchStatement = null;
     }
-    if (connection != null && !connection.isClosed()) {
-      connection.close();
+    if (connection != null) {
+      connectionHandler.releaseConnection(connection);
       connection = null;
     }
   }
