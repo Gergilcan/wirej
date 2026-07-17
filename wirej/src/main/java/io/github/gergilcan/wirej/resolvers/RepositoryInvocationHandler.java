@@ -1,5 +1,6 @@
 package io.github.gergilcan.wirej.resolvers;
 
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -30,8 +31,9 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         // Empty implementation - you handle it yourself
         // connectionHandler and rsqlParser are available here
         var returnType = method.getReturnType();
-        var fileName = method.getAnnotation(QueryFile.class).value();
-        var isBatch = method.getAnnotation(QueryFile.class).isBatch();
+        var queryFile = method.getAnnotation(QueryFile.class);
+        var fileName = queryFile.value();
+        var isBatch = queryFile.isBatch();
 
         RequestFilters filters = getParameterValueFromType(method, args, RequestFilters.class);
         RequestPagination pagination = getParameterValueFromType(method, args, RequestPagination.class);
@@ -97,9 +99,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                         databaseStatement.setParameter(aliases[0], value);
                     }
                 } else {
-                    // Transform field name to snake_case
-                    String paramName = field.getName().replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
-                    databaseStatement.setParameter(paramName, value);
+                    databaseStatement.setParameter(resolveParameterName(field, field.getName()), value);
                 }
             } catch (IllegalAccessException e) {
                 throw new RuntimeException("Could not access field: " + field.getName(), e);
@@ -158,14 +158,8 @@ public class RepositoryInvocationHandler implements InvocationHandler {
 
     private boolean isParameterANonBasicClass(Object arg) {
         // Exclude also the Boolean, Integer, Long, and primitive types
-        if (arg == null || arg.getClass().isPrimitive() || arg == String.class || arg == Boolean.class
-                || arg == Integer.class
-                || arg == Long.class || arg == Double.class || arg == Float.class
-                || arg == Short.class
-                || arg == Byte.class || arg == BigDecimal.class || arg == Timestamp.class
-                || arg == java.security.Timestamp.class || arg == java.util.Date.class
-                || arg == LocalDateTime.class || arg instanceof String ||
-                arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
+        if (arg == null || arg instanceof String
+                || arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
                 || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal
                 || arg instanceof Timestamp || arg instanceof java.security.Timestamp || arg instanceof java.util.Date
                 || arg instanceof LocalDateTime) {
@@ -183,13 +177,19 @@ public class RepositoryInvocationHandler implements InvocationHandler {
 
     private void setSingleParameter(java.lang.reflect.Parameter parameter, Object arg,
             DatabaseStatement<?> databaseStatement) {
-        JsonAlias aliasAnnotation = parameter.getAnnotation(JsonAlias.class);
+        databaseStatement.setParameter(resolveParameterName(parameter, parameter.getName()), arg);
+    }
+
+    /**
+     * Resolves the parameter name to use: the first @JsonAlias value if present,
+     * otherwise the snake_case form of the raw name.
+     */
+    private String resolveParameterName(AnnotatedElement element, String rawName) {
+        JsonAlias aliasAnnotation = element.getAnnotation(JsonAlias.class);
         if (aliasAnnotation != null && aliasAnnotation.value().length > 0) {
-            databaseStatement.setParameter(aliasAnnotation.value()[0], arg);
-        } else {
-            String paramName = parameter.getName().replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
-            databaseStatement.setParameter(paramName, arg);
+            return aliasAnnotation.value()[0];
         }
+        return rawName.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
     }
 
     @SuppressWarnings("unchecked")

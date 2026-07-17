@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * automatically.
  */
 // Add this line to ensure the annotation is available at compile time.
-@Retention(RetentionPolicy.SOURCE)
+@Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface ServiceMethod {
   /**

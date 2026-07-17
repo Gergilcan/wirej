@@ -14,12 +14,9 @@ import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 // Explicitly list all annotations the processor might interact with.
 @SupportedAnnotationTypes({
@@ -131,20 +128,6 @@ public class ServiceMethodProcessor extends AbstractProcessor {
     private void validateQueryFileExists(ExecutableElement method, String resourcePath) {
         boolean fileFound = false;
         String foundLocation = "";
-
-        // Strategy 1: Check the annotation processor classpath
-        // (ANNOTATION_PROCESSOR_PATH)
-        // This includes the application's compiled resources
-        try {
-            messager.printMessage(Diagnostic.Kind.NOTE, "Checking for query file: " + resourcePath);
-            try (Stream<Path> file = Files.find(Path.of("."), 10,
-                    (p, basicFileAttributes) -> p.getFileName().toString().equalsIgnoreCase(resourcePath))) {
-                file.findFirst().ifPresent(f -> messager.printMessage(Diagnostic.Kind.NOTE,
-                        "✓ Found query file: " + resourcePath + " in " + f.toAbsolutePath()));
-            }
-        } catch (IOException e) {
-            // Continue to next strategy
-        }
 
         try {
 
