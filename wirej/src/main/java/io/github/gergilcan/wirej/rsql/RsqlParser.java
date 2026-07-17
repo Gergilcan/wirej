@@ -174,7 +174,6 @@ public class RsqlParser {
   }
 
   private String findColumnNameFromAlias(String alias, Class<?> entityClass) {
-    String columnName = alias;
     try {
       var field = entityClass.getDeclaredField(alias);
       var columnAnnotation = field.getAnnotation(JsonAlias.class);
@@ -194,6 +193,6 @@ public class RsqlParser {
       return alias;
     }
 
-    return columnName;
+    return alias;
   }
 }
