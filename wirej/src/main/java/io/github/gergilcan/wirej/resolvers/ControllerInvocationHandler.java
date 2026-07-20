@@ -3,6 +3,8 @@ package io.github.gergilcan.wirej.resolvers;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,7 @@ import io.github.gergilcan.wirej.exceptions.WireJException;
 public class ControllerInvocationHandler implements InvocationHandler {
     private final ApplicationContext applicationContext;
     private final Class<?> serviceClass;
+    private final Map<Method, Method> serviceMethodCache = new ConcurrentHashMap<>();
 
     public ControllerInvocationHandler(ApplicationContext applicationContext, Class<?> serviceClass) {
         this.applicationContext = applicationContext;
@@ -23,26 +26,10 @@ public class ControllerInvocationHandler implements InvocationHandler {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        // Get the service method annotation
-        ServiceMethod serviceMethodAnnotation = method.getAnnotation(ServiceMethod.class);
-        if (serviceMethodAnnotation == null) {
-            throw new WireJException("Method " + method.getName() + " is not annotated with @ServiceMethod");
-        }
-
-        // Determine the service method name to call
-        String serviceMethodName = serviceMethodAnnotation.value().isEmpty()
-                ? method.getName()
-                : serviceMethodAnnotation.value();
+        Method serviceMethod = serviceMethodCache.computeIfAbsent(method, this::resolveServiceMethod);
 
         // Get the service bean from Spring context
         Object serviceBean = applicationContext.getBean(serviceClass);
-
-        // Find the method in the service class
-        Method serviceMethod = findServiceMethod(serviceClass, serviceMethodName, method.getParameterTypes());
-        if (serviceMethod == null) {
-            throw new WireJException(
-                    "Service method " + serviceMethodName + " not found in " + serviceClass.getName());
-        }
 
         // Invoke the service method and get the result
         Object serviceResult;
@@ -52,7 +39,8 @@ public class ControllerInvocationHandler implements InvocationHandler {
             throw e.getCause() != null ? e.getCause() : e;
         } catch (IllegalAccessException e) {
             throw new WireJException(
-                    "Could not invoke service method '" + serviceMethodName + "' on " + serviceClass.getName(), e);
+                    "Could not invoke service method '" + serviceMethod.getName() + "' on " + serviceClass.getName(),
+                    e);
         }
 
         // Get the HTTP status from @ResponseStatus annotation
@@ -67,6 +55,29 @@ public class ControllerInvocationHandler implements InvocationHandler {
             // If service method returns a value, use it as the body
             return ResponseEntity.status(status).body(serviceResult);
         }
+    }
+
+    private Method resolveServiceMethod(Method controllerMethod) {
+        // Get the service method annotation
+        ServiceMethod serviceMethodAnnotation = controllerMethod.getAnnotation(ServiceMethod.class);
+        if (serviceMethodAnnotation == null) {
+            throw new WireJException(
+                    "Method " + controllerMethod.getName() + " is not annotated with @ServiceMethod");
+        }
+
+        // Determine the service method name to call
+        String serviceMethodName = serviceMethodAnnotation.value().isEmpty()
+                ? controllerMethod.getName()
+                : serviceMethodAnnotation.value();
+
+        // Find the method in the service class
+        Method serviceMethod = findServiceMethod(serviceClass, serviceMethodName,
+                controllerMethod.getParameterTypes());
+        if (serviceMethod == null) {
+            throw new WireJException(
+                    "Service method " + serviceMethodName + " not found in " + serviceClass.getName());
+        }
+        return serviceMethod;
     }
 
     private Method findServiceMethod(Class<?> serviceClass, String methodName, Class<?>[] parameterTypes) {
