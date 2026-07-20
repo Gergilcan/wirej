@@ -16,10 +16,6 @@ public class RequestFilters {
   private String sort = "id==DESC";
 
   public void addFilter(String filter) {
-    if (filters == null) {
-      filters = filter;
-    } else {
-      filters += ";" + filter;
-    }
+    filters = filters == null ? filter : filters + ";" + filter;
   }
 }

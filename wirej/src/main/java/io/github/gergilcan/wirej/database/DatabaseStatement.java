@@ -51,16 +51,6 @@ public class DatabaseStatement<T> {
     openConnection(connectionHandler);
   }
 
-  public DatabaseStatement(String fileName, RequestFilters filters, Class<?> entityClass,
-      ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, filters, null, entityClass, null, connectionHandler);
-  }
-
-  public DatabaseStatement(String fileName, RequestFilters filters, Class<?> entityClass, RsqlParser parser,
-      ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, filters, null, entityClass, parser, connectionHandler);
-  }
-
   public DatabaseStatement(String fileName, RequestFilters filters, RequestPagination pagination,
       Class<?> entityClass, RsqlParser parser, ConnectionHandler connectionHandler) throws IOException, SQLException {
     this.entityClass = entityClass;
@@ -85,8 +75,6 @@ public class DatabaseStatement<T> {
               : "");
     }
 
-    // Acquired last, once filter/sort parsing (which can throw on malformed
-    // input) is done, so a bad filter never leaves a connection stranded open.
     openConnection(connectionHandler);
   }
 
@@ -129,10 +117,6 @@ public class DatabaseStatement<T> {
     return runQuery(PreparedStatement::execute);
   }
 
-  /**
-   * Runs a query against a fresh prepared statement built from the current
-   * query/parameters, closing the connection afterwards regardless of outcome.
-   */
   private <R> R runQuery(SqlFunction<R> action) throws SQLException {
     log.debug("{}{}", EXECUTING_QUERY_DEBUG_TEXT, fileName);
     replaceParameters();
@@ -197,16 +181,18 @@ public class DatabaseStatement<T> {
     }
   }
 
+  private static final Pattern PARAMETER_PATTERN = Pattern.compile("(?<!:):(?!:)([a-zA-Z_]\\w*)");
+
   private void replaceParameters() {
-    var temporalQuery = originalQuery;
-    Pattern pattern = Pattern.compile(":\\w*");
-    Matcher matcher = pattern.matcher(originalQuery);
+    statementParameters.clear();
+    Matcher matcher = PARAMETER_PATTERN.matcher(originalQuery);
+    StringBuilder result = new StringBuilder();
     while (matcher.find()) {
-      var parameterName = matcher.group().replace(":", "");
-      statementParameters.add(parameterName);
-      temporalQuery = temporalQuery.replaceAll(matcher.group() + "\\b", "?");
+      statementParameters.add(matcher.group(1));
+      matcher.appendReplacement(result, "?");
     }
-    finalQuery = temporalQuery;
+    matcher.appendTail(result);
+    finalQuery = result.toString();
   }
 
   private void setStatementParameters(PreparedStatement statement) throws SQLException {

@@ -44,10 +44,7 @@ public class ControllerInvocationHandler implements InvocationHandler {
                     "Service method " + serviceMethodName + " not found in " + serviceClass.getName());
         }
 
-        // Invoke the service method and get the result. InvocationTargetException is
-        // unwrapped so the exception the service actually threw (e.g. a business
-        // exception a caller's @ExceptionHandler matches on) propagates as itself,
-        // instead of being buried under reflection/proxy wrapper exceptions.
+        // Invoke the service method and get the result
         Object serviceResult;
         try {
             serviceResult = serviceMethod.invoke(serviceBean, args);

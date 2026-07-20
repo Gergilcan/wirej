@@ -15,12 +15,6 @@ import org.springframework.jdbc.datasource.ConnectionHolder;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-/**
- * Guards the fix for releaseConnection: it must go through DataSourceUtils
- * rather than Connection#close() directly, so a connection participating in
- * an ongoing Spring-managed transaction isn't physically closed out from
- * under that transaction.
- */
 class ConnectionHandlerTest {
 
     private DataSource dataSource;

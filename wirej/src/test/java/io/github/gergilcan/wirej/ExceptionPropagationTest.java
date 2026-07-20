@@ -17,13 +17,6 @@ import io.github.gergilcan.wirej.entities.User;
 import io.github.gergilcan.wirej.exceptions.WireJException;
 import io.github.gergilcan.wirej.repositories.UserRepository;
 
-/**
- * Guards against java.lang.reflect.Proxy silently swallowing checked
- * exceptions into a message-less UndeclaredThrowableException: repository
- * and controller proxy methods don't declare "throws SQLException", so any
- * checked exception thrown across them must be surfaced as an unchecked
- * WireJException instead, with the original cause and useful context intact.
- */
 @SpringBootTest(classes = TestApplication.class)
 class ExceptionPropagationTest {
 

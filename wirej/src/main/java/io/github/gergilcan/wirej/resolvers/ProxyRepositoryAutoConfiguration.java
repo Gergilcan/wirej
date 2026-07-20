@@ -43,8 +43,8 @@ public class ProxyRepositoryAutoConfiguration {
     }
 
     /**
-     * Scans for interfaces annotated with @Repository and registers a proxy
-     * factory bean for each one.
+     * This class scans for interfaces annotated with @Repository and registers
+     * a proxy factory bean for each one.
      */
     static class ProxyRepositoryRegistrar extends AnnotatedInterfaceRegistrar
             implements BeanDefinitionRegistryPostProcessor {

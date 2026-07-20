@@ -11,4 +11,6 @@ public @interface QueryFile {
   String value();
 
   boolean isBatch() default false;
+
+  QueryOperation operation() default QueryOperation.AUTO;
 }

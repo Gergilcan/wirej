@@ -37,4 +37,12 @@ public class UsersService {
     public String[] getGenders() {
         return new String[] { "Male", "Female", "Other" };
     }
+
+    public String describeAny(Object value) {
+        return String.valueOf(value);
+    }
+
+    public Long countSomething() {
+        return 42L;
+    }
 }

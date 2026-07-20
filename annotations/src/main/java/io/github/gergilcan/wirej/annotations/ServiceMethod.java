@@ -10,7 +10,6 @@ import java.lang.annotation.Target;
  * If no value is provided, the annotated method name will be used
  * automatically.
  */
-// Add this line to ensure the annotation is available at compile time.
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface ServiceMethod {

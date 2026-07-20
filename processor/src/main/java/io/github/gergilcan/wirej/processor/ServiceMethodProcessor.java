@@ -8,13 +8,16 @@ import io.github.gergilcan.wirej.annotations.ServiceMethod;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.MirroredTypeException;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
-import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -125,105 +128,93 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         }
     }
 
+    private static final List<StandardLocation> RESOURCE_LOOKUP_LOCATIONS = List.of(
+            StandardLocation.ANNOTATION_PROCESSOR_PATH, StandardLocation.CLASS_PATH, StandardLocation.CLASS_OUTPUT);
+
     private void validateQueryFileExists(ExecutableElement method, String resourcePath) {
-        boolean fileFound = false;
-        String foundLocation = "";
-
-        try {
-
-            FileObject resource = processingEnv.getFiler().getResource(
-                    StandardLocation.ANNOTATION_PROCESSOR_PATH, "", resourcePath);
-            resource.openInputStream().close();
-            fileFound = true;
-            foundLocation = "annotation processor path";
-        } catch (IOException e) {
-            // Continue to next strategy
-        }
-
-        // Strategy 2: Check class path - this includes compiled resources
-        if (!fileFound) {
-            try {
-                FileObject resource = processingEnv.getFiler().getResource(
-                        StandardLocation.CLASS_PATH, "", resourcePath);
-                resource.openInputStream().close();
-                fileFound = true;
-                foundLocation = "class path";
+        for (StandardLocation location : RESOURCE_LOOKUP_LOCATIONS) {
+            try (var in = processingEnv.getFiler().getResource(location, "", resourcePath).openInputStream()) {
+                messager.printMessage(Diagnostic.Kind.NOTE,
+                        "✓ Found query file: " + resourcePath + " in " + location + " for method "
+                                + method.getSimpleName());
+                return;
             } catch (IOException e) {
-                // Continue to next strategy
             }
         }
 
-        // Strategy 3: Try class output (for cases where resources are already
-        // processed)
-        if (!fileFound) {
-            try {
-                FileObject resource = processingEnv.getFiler().getResource(
-                        StandardLocation.CLASS_OUTPUT, "", resourcePath);
-                resource.openInputStream().close();
-                fileFound = true;
-                foundLocation = "class output";
-            } catch (IOException e) {
-                // Continue to next strategy
-            }
-        }
-
-        // Strategy 4: As a last resort, make it just a warning during development
-        // since the file might not be compiled yet but exists in source
-        if (!fileFound) {
-            // During annotation processing, resource files might not be available yet
-            // This is especially common in IDEs during development
-            error(method, "Query file not found during compilation: " + resourcePath +
-                    " for method " + method.getSimpleName() +
-                    ". This might be normal if the resource hasn't been processed yet. " +
-                    "Ensure the file exists in src/main/resources/" + resourcePath +
-                    " or src/test/resources/" + resourcePath);
-        } else {
-            messager.printMessage(Diagnostic.Kind.NOTE,
-                    "✓ Found query file: " + resourcePath + " in " + foundLocation +
-                            " for method " + method.getSimpleName());
-        }
+        error(method, "Query file not found during compilation: " + resourcePath +
+                " for method " + method.getSimpleName() +
+                ". This might be normal if the resource hasn't been processed yet. " +
+                "Ensure the file exists in src/main/resources/" + resourcePath +
+                " or src/test/resources/" + resourcePath);
     }
 
-    /**
-     * Checks if a method with a matching signature (name and parameter types)
-     * exists on the target class.
-     */
     private void validateMethodExists(ExecutableElement sourceMethod, TypeMirror targetClass, String methodName) {
         TypeElement targetClassElement = (TypeElement) processingEnv.getTypeUtils().asElement(targetClass);
+        Types typeUtils = processingEnv.getTypeUtils();
 
         List<? extends TypeMirror> sourceParamTypes = sourceMethod.getParameters().stream()
                 .map(VariableElement::asType).toList();
 
-        boolean methodFound = targetClassElement.getEnclosedElements().stream()
+        Optional<ExecutableElement> matchingMethod = targetClassElement.getEnclosedElements().stream()
                 .filter(element -> element.getKind() == ElementKind.METHOD)
                 .map(ExecutableElement.class::cast)
-                .anyMatch(targetMethod -> {
-                    boolean nameMatches = targetMethod.getSimpleName().toString().equals(methodName);
-                    if (!nameMatches) {
-                        return false;
-                    }
+                .filter(targetMethod -> isCompatibleMethod(typeUtils, sourceParamTypes, targetMethod, methodName))
+                .findFirst();
 
-                    List<? extends VariableElement> targetParams = targetMethod.getParameters();
-                    if (sourceParamTypes.size() != targetParams.size()) {
-                        return false;
-                    }
-
-                    for (int i = 0; i < sourceParamTypes.size(); i++) {
-                        TypeMirror sourceType = sourceParamTypes.get(i);
-                        TypeMirror targetType = targetParams.get(i).asType();
-                        if (!processingEnv.getTypeUtils().isSameType(sourceType, targetType)) {
-                            return false;
-                        }
-                    }
-                    return true;
-                });
-
-        if (!methodFound) {
+        if (matchingMethod.isEmpty()) {
             String paramsString = sourceParamTypes.stream()
                     .map(TypeMirror::toString)
                     .collect(Collectors.joining(", "));
             error(sourceMethod, "Method '%s(%s)' does not exist in class %s", methodName, paramsString,
                     targetClass.toString());
+            return;
+        }
+
+        checkReturnTypeCompatible(sourceMethod, matchingMethod.get(), methodName, targetClass);
+    }
+
+    private boolean isCompatibleMethod(Types typeUtils, List<? extends TypeMirror> sourceParamTypes,
+            ExecutableElement targetMethod, String methodName) {
+        if (!targetMethod.getSimpleName().toString().equals(methodName)) {
+            return false;
+        }
+
+        List<? extends VariableElement> targetParams = targetMethod.getParameters();
+        if (sourceParamTypes.size() != targetParams.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < sourceParamTypes.size(); i++) {
+            if (!typeUtils.isAssignable(sourceParamTypes.get(i), targetParams.get(i).asType())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void checkReturnTypeCompatible(ExecutableElement sourceMethod, ExecutableElement targetMethod,
+            String methodName, TypeMirror targetClass) {
+        TypeMirror sourceReturnType = sourceMethod.getReturnType();
+        if (sourceReturnType.getKind() != TypeKind.DECLARED) {
+            return;
+        }
+
+        List<? extends TypeMirror> typeArguments = ((DeclaredType) sourceReturnType).getTypeArguments();
+        if (typeArguments.isEmpty() || typeArguments.get(0).getKind() == TypeKind.WILDCARD) {
+            return;
+        }
+
+        TypeMirror expectedBodyType = typeArguments.get(0);
+        TypeMirror actualReturnType = targetMethod.getReturnType();
+        if (actualReturnType.getKind() == TypeKind.VOID) {
+            return;
+        }
+
+        if (!processingEnv.getTypeUtils().isAssignable(actualReturnType, expectedBodyType)) {
+            warn(sourceMethod,
+                    "Method '%s' in class %s returns %s, which is not assignable to the declared response body type %s",
+                    methodName, targetClass.toString(), actualReturnType.toString(), expectedBodyType.toString());
         }
     }
 
@@ -239,6 +230,13 @@ public class ServiceMethodProcessor extends AbstractProcessor {
     private void error(Element e, String msg, Object... args) {
         messager.printMessage(
                 Diagnostic.Kind.ERROR,
+                String.format(msg, args),
+                e);
+    }
+
+    private void warn(Element e, String msg, Object... args) {
+        messager.printMessage(
+                Diagnostic.Kind.WARNING,
                 String.format(msg, args),
                 e);
     }

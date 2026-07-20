@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.HttpStatus;
@@ -50,4 +51,14 @@ public interface UserController2 {
     @ServiceMethod("getGenders")
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> getGenders();
+
+    @GetMapping("/describe")
+    @ServiceMethod("describeAny")
+    @ResponseStatus(HttpStatus.OK)
+    ResponseEntity<?> describeAny(@RequestParam String value);
+
+    @GetMapping("/count-something")
+    @ServiceMethod("countSomething")
+    @ResponseStatus(HttpStatus.OK)
+    ResponseEntity<String> countSomethingMismatched();
 }

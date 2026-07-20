@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.stereotype.Component;
@@ -19,11 +20,14 @@ import io.github.gergilcan.wirej.exceptions.WireJException;
 public class RsqlParser {
 
   private static final String AND = " AND ";
-  // Order matters: longer operators must be checked before the shorter
-  // operators they contain (">=" before ">", "<=" before "<").
   private static final List<String> OPERATORS_BY_PRIORITY = List.of(
       RSQLOperators.EQUAL, RSQLOperators.NOT_EQUAL, RSQLOperators.GREATER_THAN_OR_EQUAL, RSQLOperators.GREATER_THAN,
       RSQLOperators.LESS_THAN_OR_EQUAL, RSQLOperators.LESS_THAN, RSQLOperators.IN, RSQLOperators.NOT_IN);
+  private static final Map<String, String> SQL_OPERATORS = Map.of(
+      RSQLOperators.EQUAL, " = ", RSQLOperators.NOT_EQUAL, " != ",
+      RSQLOperators.GREATER_THAN, " > ", RSQLOperators.GREATER_THAN_OR_EQUAL, " >= ",
+      RSQLOperators.LESS_THAN, " < ", RSQLOperators.LESS_THAN_OR_EQUAL, " <= ",
+      RSQLOperators.IN, " LIKE ", RSQLOperators.NOT_IN, " NOT LIKE ");
 
   public String parse(String rsqlQuery, Class<?> entityClass, DatabaseStatement<?> statement) {
     AtomicInteger parameterNumber = new AtomicInteger(0);
@@ -36,16 +40,12 @@ public class RsqlParser {
       }
     }
 
-    // Check if the where :filters is in first place in the original statement quer
-    if (statement.getOriginalQuery().toLowerCase().contains("where :filters")) {
-      return String.join(AND, whereClauses);
+    var joinedClauses = String.join(AND, whereClauses);
+    var originalQuery = statement.getOriginalQuery().toLowerCase();
+    if (originalQuery.contains("where :filters")) {
+      return joinedClauses;
     }
-
-    if (!statement.getOriginalQuery().toLowerCase().contains("where")) {
-      return "WHERE " + String.join(AND, whereClauses);
-    }
-
-    return "AND " + String.join(AND, whereClauses);
+    return (originalQuery.contains("where") ? "AND " : "WHERE ") + joinedClauses;
   }
 
   private String parseWhereClause(String part, Class<?> entityClass, DatabaseStatement<?> statement,
@@ -140,48 +140,23 @@ public class RsqlParser {
   }
 
   private String getOperator(String operator) {
-    switch (operator) {
-      case RSQLOperators.EQUAL:
-        return " = ";
-      case RSQLOperators.NOT_EQUAL:
-        return " != ";
-      case RSQLOperators.GREATER_THAN:
-        return " > ";
-      case RSQLOperators.GREATER_THAN_OR_EQUAL:
-        return " >= ";
-      case RSQLOperators.LESS_THAN_OR_EQUAL:
-        return " <= ";
-      case RSQLOperators.LESS_THAN:
-        return " < ";
-      case RSQLOperators.IN:
-        return " LIKE ";
-      case RSQLOperators.NOT_IN:
-        return " NOT LIKE ";
-      default:
-        break;
-    }
-
-    return null;
+    return SQL_OPERATORS.get(operator);
   }
 
   private String findColumnNameFromAlias(String alias, Class<?> entityClass) {
     try {
-      var field = entityClass.getDeclaredField(alias);
-      var columnAnnotation = field.getAnnotation(JsonAlias.class);
+      JsonAlias columnAnnotation = entityClass.getDeclaredField(alias).getAnnotation(JsonAlias.class);
       if (columnAnnotation != null) {
         return columnAnnotation.value()[0];
       }
-
-      var fields = entityClass.getDeclaredFields();
-      for (var innerField : fields) {
-        columnAnnotation = innerField.getAnnotation(JsonAlias.class);
-        if (columnAnnotation != null && columnAnnotation.value()[0].equals(alias)) {
-          return innerField.getName();
-        }
-      }
     } catch (NoSuchFieldException e) {
-      // The alias is not a field of the entity class
-      return alias;
+    }
+
+    for (var field : entityClass.getDeclaredFields()) {
+      JsonAlias columnAnnotation = field.getAnnotation(JsonAlias.class);
+      if (columnAnnotation != null && columnAnnotation.value()[0].equals(alias)) {
+        return field.getName();
+      }
     }
 
     return alias;

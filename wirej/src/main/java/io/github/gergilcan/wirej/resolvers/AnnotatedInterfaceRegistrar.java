@@ -14,13 +14,6 @@ import org.springframework.core.type.filter.AnnotationTypeFilter;
 
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Shared logic for scanning the application's base packages for interfaces
- * carrying a marker annotation, then registering a bean definition for each
- * match. Repository and controller proxy registration only differ in which
- * marker annotation they scan for, which candidates they accept, and what
- * bean definition they build - everything else is identical.
- */
 @Slf4j
 abstract class AnnotatedInterfaceRegistrar {
 
@@ -64,15 +57,10 @@ abstract class AnnotatedInterfaceRegistrar {
         }
     }
 
-    /**
-     * Additional filtering beyond the marker annotation used to find the
-     * candidate. Defaults to accepting every candidate.
-     */
     protected boolean accept(Class<?> candidateInterface) {
         return true;
     }
 
-    /** Builds and registers the bean definition for an accepted candidate. */
     protected abstract void registerBean(BeanDefinitionRegistry registry, String beanName, Class<?> candidateInterface);
 
     private static String decapitalize(String name) {
