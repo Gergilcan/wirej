@@ -1,5 +1,6 @@
 package io.github.gergilcan.wirej.resolvers;
 
+import java.io.IOException;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -17,6 +18,7 @@ import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
 import io.github.gergilcan.wirej.database.ConnectionHandler;
 import io.github.gergilcan.wirej.database.DatabaseStatement;
+import io.github.gergilcan.wirej.exceptions.WireJException;
 import io.github.gergilcan.wirej.rsql.RsqlParser;
 
 public class RepositoryInvocationHandler implements InvocationHandler {
@@ -36,8 +38,6 @@ public class RepositoryInvocationHandler implements InvocationHandler {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        // Empty implementation - you handle it yourself
-        // connectionHandler and rsqlParser are available here
         var returnType = method.getReturnType();
         var queryFile = method.getAnnotation(QueryFile.class);
         var fileName = queryFile.value();
@@ -47,27 +47,31 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         RequestPagination pagination = getParameterValueFromType(method, args, RequestPagination.class);
         Class<?> entityClass = returnType.isArray() ? returnType.getComponentType()
                 : getParameterValueFromType(method, args, Class.class);
-        var databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
-                entityClass, rsqlParser, connectionHandler);
 
-        // Set parameters for the statement
-        setStatementParameters(method, args, databaseStatement, isBatch);
+        // IOException/SQLException are caught and rewrapped here because the
+        // generated repository interfaces don't declare them: left unchecked, the
+        // JDK proxy would swallow the real error into a message-less
+        // UndeclaredThrowableException instead of surfacing what actually failed.
+        try {
+            var databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
+                    entityClass, rsqlParser, connectionHandler);
 
-        Object result = null;
-        if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
-            result = handleGetRequest(returnType, databaseStatement);
-        } else if (method.getName().toLowerCase().contains("count")) {
-            result = databaseStatement.getSingleValue();
-        } else {
-            // Execute the statement and return the result if it's not a void method
-            if (!isBatch) {
-                result = method.getReturnType() == Void.TYPE ? databaseStatement.execute()
-                        : databaseStatement.getResult();
+            setStatementParameters(method, args, databaseStatement, isBatch);
+
+            if (method.getName().startsWith("get") || method.getName().startsWith("find")) {
+                return handleGetRequest(returnType, databaseStatement);
+            } else if (method.getName().toLowerCase().contains("count")) {
+                return databaseStatement.getSingleValue();
+            } else if (!isBatch) {
+                return returnType == Void.TYPE ? databaseStatement.execute() : databaseStatement.getResult();
             } else {
-                result = databaseStatement.executeBatch();
+                return databaseStatement.executeBatch();
             }
+        } catch (IOException | SQLException e) {
+            throw new WireJException("Query failed for repository method '" + method.getName()
+                    + "' (query file: " + fileName + ", entity: " + entityClass.getSimpleName() + "): "
+                    + e.getMessage(), e);
         }
-        return result;
     }
 
     private Object handleGetRequest(Class<?> returnType, DatabaseStatement<Object> databaseStatement)
@@ -110,7 +114,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                     databaseStatement.setParameter(resolveParameterName(field, field.getName()), value);
                 }
             } catch (IllegalAccessException e) {
-                throw new RuntimeException("Could not access field: " + field.getName(), e);
+                throw new WireJException("Could not access field: " + field.getName(), e);
             }
         }
     }

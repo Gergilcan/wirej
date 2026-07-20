@@ -1,6 +1,7 @@
 package io.github.gergilcan.wirej.resolvers;
 
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 import org.springframework.context.ApplicationContext;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 import io.github.gergilcan.wirej.annotations.ServiceMethod;
+import io.github.gergilcan.wirej.exceptions.WireJException;
 
 public class ControllerInvocationHandler implements InvocationHandler {
     private final ApplicationContext applicationContext;
@@ -24,7 +26,7 @@ public class ControllerInvocationHandler implements InvocationHandler {
         // Get the service method annotation
         ServiceMethod serviceMethodAnnotation = method.getAnnotation(ServiceMethod.class);
         if (serviceMethodAnnotation == null) {
-            throw new RuntimeException("Method " + method.getName() + " is not annotated with @ServiceMethod");
+            throw new WireJException("Method " + method.getName() + " is not annotated with @ServiceMethod");
         }
 
         // Determine the service method name to call
@@ -38,12 +40,23 @@ public class ControllerInvocationHandler implements InvocationHandler {
         // Find the method in the service class
         Method serviceMethod = findServiceMethod(serviceClass, serviceMethodName, method.getParameterTypes());
         if (serviceMethod == null) {
-            throw new RuntimeException(
+            throw new WireJException(
                     "Service method " + serviceMethodName + " not found in " + serviceClass.getName());
         }
 
-        // Invoke the service method and get the result
-        Object serviceResult = serviceMethod.invoke(serviceBean, args);
+        // Invoke the service method and get the result. InvocationTargetException is
+        // unwrapped so the exception the service actually threw (e.g. a business
+        // exception a caller's @ExceptionHandler matches on) propagates as itself,
+        // instead of being buried under reflection/proxy wrapper exceptions.
+        Object serviceResult;
+        try {
+            serviceResult = serviceMethod.invoke(serviceBean, args);
+        } catch (InvocationTargetException e) {
+            throw e.getCause() != null ? e.getCause() : e;
+        } catch (IllegalAccessException e) {
+            throw new WireJException(
+                    "Could not invoke service method '" + serviceMethodName + "' on " + serviceClass.getName(), e);
+        }
 
         // Get the HTTP status from @ResponseStatus annotation
         ResponseStatus responseStatusAnnotation = method.getAnnotation(ResponseStatus.class);

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.annotation.JsonAlias;
 
 import io.github.gergilcan.wirej.database.DatabaseStatement;
+import io.github.gergilcan.wirej.exceptions.WireJException;
 
 @Component
 public class RsqlParser {
@@ -52,70 +53,61 @@ public class RsqlParser {
     var parts = part.replace("(", "").replace(")", "").split(",");
     List<String> whereClauses = new LinkedList<>();
     for (String clause : parts) {
-      var whereClause = transformToSqlClause(clause, entityClass, statement, parameterNumber);
-
-      if (whereClause != null) {
-        whereClauses.add(whereClause);
-      }
+      whereClauses.add(transformToSqlClause(clause, entityClass, statement, parameterNumber));
     }
 
-    return !whereClauses.isEmpty() ? "(" + String.join(" OR ", whereClauses) + ")" : "";
+    return "(" + String.join(" OR ", whereClauses) + ")";
   }
 
   public String parseSorting(String rsqlQuery, Class<?> entityClass) {
     var sortClauses = new LinkedList<String>();
     var multipleSortingParts = rsqlQuery.split(";");
     for (String part : multipleSortingParts) {
-      var sortClause = transformToOrderByClause(part, entityClass);
-      if (sortClause != null) {
-        sortClauses.add(sortClause);
-      }
+      sortClauses.add(transformToOrderByClause(part, entityClass));
     }
 
-    return !sortClauses.isEmpty() ? "ORDER BY " + String.join(", ", sortClauses) : "";
+    return "ORDER BY " + String.join(", ", sortClauses);
   }
 
   private String transformToOrderByClause(String clause, Class<?> entityClass) {
     var operator = findOperator(clause);
-    if (operator != null) {
-      var clauseParts = clause.split(operator);
-      var direction = clauseParts[1];
-      if (direction.equals("DESC") || direction.equals("ASC")) {
-        var columnName = findColumnNameFromAlias(clauseParts[0], entityClass);
-        if (columnName != null) {
-          return columnName + " " + direction;
-        }
-      }
+    if (operator == null) {
+      throw new WireJException("Unrecognized sort clause (no supported operator found): '" + clause + "'");
     }
 
-    return null;
+    var clauseParts = clause.split(operator);
+    var direction = clauseParts[1];
+    if (!direction.equals("DESC") && !direction.equals("ASC")) {
+      throw new WireJException(
+          "Invalid sort direction '" + direction + "' in clause '" + clause + "'; expected ASC or DESC");
+    }
+
+    return findColumnNameFromAlias(clauseParts[0], entityClass) + " " + direction;
   }
 
   private String transformToSqlClause(String clause, Class<?> entityClass, DatabaseStatement<?> statement,
       AtomicInteger parameterNumber) {
     var operator = findOperator(clause);
-    if (operator != null) {
-      var clauseParts = clause.split(operator);
-      parameterNumber.incrementAndGet();
-      var value = castType(clauseParts[1]);
-      if (operator.equals(RSQLOperators.IN) || operator.equals(RSQLOperators.NOT_IN)) {
-        value = "%" + value + "%";
-      }
-      statement.setParameter("filter_value_" + parameterNumber, value);
-      var fieldName = findColumnNameFromAlias(clauseParts[0], entityClass);
-
-      if (fieldName != null) {
-        // If its a timestamp field we need to check with a between that date and the
-        // next day
-        if (value instanceof Timestamp) {
-          return "DATE(" + fieldName + ")" + getOperator(operator) + ":filter_value_" + parameterNumber;
-        }
-
-        return fieldName + (value == null ? " is null" : getOperator(operator) + ":filter_value_" + parameterNumber);
-      }
+    if (operator == null) {
+      throw new WireJException("Unrecognized filter clause (no supported operator found): '" + clause + "'");
     }
 
-    return null;
+    var clauseParts = clause.split(operator);
+    parameterNumber.incrementAndGet();
+    var value = castType(clauseParts[1]);
+    if (operator.equals(RSQLOperators.IN) || operator.equals(RSQLOperators.NOT_IN)) {
+      value = "%" + value + "%";
+    }
+    statement.setParameter("filter_value_" + parameterNumber, value);
+    var fieldName = findColumnNameFromAlias(clauseParts[0], entityClass);
+
+    // If its a timestamp field we need to check with a between that date and the
+    // next day
+    if (value instanceof Timestamp) {
+      return "DATE(" + fieldName + ")" + getOperator(operator) + ":filter_value_" + parameterNumber;
+    }
+
+    return fieldName + (value == null ? " is null" : getOperator(operator) + ":filter_value_" + parameterNumber);
   }
 
   private Object castType(String clauseValue) {
