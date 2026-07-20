@@ -1,6 +1,5 @@
 package io.github.gergilcan.wirej.rsql;
 
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -19,6 +18,11 @@ import io.github.gergilcan.wirej.database.DatabaseStatement;
 public class RsqlParser {
 
   private static final String AND = " AND ";
+  // Order matters: longer operators must be checked before the shorter
+  // operators they contain (">=" before ">", "<=" before "<").
+  private static final List<String> OPERATORS_BY_PRIORITY = List.of(
+      RSQLOperators.EQUAL, RSQLOperators.NOT_EQUAL, RSQLOperators.GREATER_THAN_OR_EQUAL, RSQLOperators.GREATER_THAN,
+      RSQLOperators.LESS_THAN_OR_EQUAL, RSQLOperators.LESS_THAN, RSQLOperators.IN, RSQLOperators.NOT_IN);
 
   public String parse(String rsqlQuery, Class<?> entityClass, DatabaseStatement<?> statement) {
     AtomicInteger parameterNumber = new AtomicInteger(0);
@@ -140,18 +144,7 @@ public class RsqlParser {
   }
 
   private String findOperator(String clause) {
-    for (Field field : RSQLOperators.class.getDeclaredFields()) {
-      try {
-        var value = field.get(null).toString();
-        if (clause.contains(value)) {
-          return value;
-        }
-      } catch (IllegalAccessException e) {
-        e.printStackTrace();
-      }
-    }
-
-    return null;
+    return OPERATORS_BY_PRIORITY.stream().filter(clause::contains).findFirst().orElse(null);
   }
 
   private String getOperator(String operator) {

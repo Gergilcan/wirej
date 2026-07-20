@@ -7,6 +7,8 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 
@@ -18,6 +20,12 @@ import io.github.gergilcan.wirej.database.DatabaseStatement;
 import io.github.gergilcan.wirej.rsql.RsqlParser;
 
 public class RepositoryInvocationHandler implements InvocationHandler {
+    // Date is intentionally checked separately (via instanceof below) since it is
+    // not final: java.sql.Date and java.sql.Time are also basic types.
+    private static final Set<Class<?>> BASIC_TYPES = Set.of(String.class, Boolean.class, Integer.class, Long.class,
+            Double.class, Float.class, Short.class, Byte.class, BigDecimal.class, Timestamp.class,
+            LocalDateTime.class);
+
     private final ConnectionHandler connectionHandler;
     private final RsqlParser rsqlParser;
 
@@ -157,12 +165,7 @@ public class RepositoryInvocationHandler implements InvocationHandler {
     }
 
     private boolean isParameterANonBasicClass(Object arg) {
-        // Exclude also the Boolean, Integer, Long, and primitive types
-        if (arg == null || arg instanceof String
-                || arg instanceof Boolean || arg instanceof Integer || arg instanceof Long || arg instanceof Double
-                || arg instanceof Float || arg instanceof Short || arg instanceof Byte || arg instanceof BigDecimal
-                || arg instanceof Timestamp || arg instanceof java.security.Timestamp || arg instanceof java.util.Date
-                || arg instanceof LocalDateTime) {
+        if (arg == null || arg instanceof Date || BASIC_TYPES.contains(arg.getClass())) {
             return false;
         }
         // Check if the argument is a class type and not an array of primitives or

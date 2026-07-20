@@ -190,16 +190,9 @@ public interface UserController {
 }
 ```
 
-### 6. Configure Package Scanning (Optional)
+### 6. That's it!
 
-**application.properties**
-
-```properties
-wirej.scan.packages=com.yourcompany.controllers
-wirej.debug=true
-```
-
-That's it! WireJ will automatically:
+WireJ will automatically:
 
 - ✅ Create proxy implementations for your controller interfaces
 - ✅ Wire them to your services using method name matching
@@ -848,22 +841,7 @@ WireJ works seamlessly with standard Spring annotations:
 
 ### Package Scanning
 
-Configure which packages WireJ should scan for controllers:
-
-```properties
-# Specific packages (recommended)
-wirej.scan.packages=com.yourcompany.controllers,com.yourcompany.api
-
-# Enable debug logging
-wirej.debug=true
-
-# Disable auto-detection (default: true)
-wirej.auto-detect-packages=false
-```
-
-### Auto-Detection
-
-If no packages are specified, WireJ automatically detects your main application package by locating your `@SpringBootApplication` class.
+WireJ automatically detects which packages to scan by locating your `@SpringBootApplication` class and scanning its package (and sub-packages) for controller and repository interfaces. No configuration is required.
 
 ## 🧪 Testing
 

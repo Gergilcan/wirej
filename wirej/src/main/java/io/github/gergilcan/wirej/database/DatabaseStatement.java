@@ -96,35 +96,15 @@ public class DatabaseStatement<T> {
   }
 
   public T getResult() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
-    replaceParameters();
-    try (var statement = connection.prepareStatement(finalQuery)) {
-      setStatementParameters(statement);
+    return runQuery(statement -> {
       var rs = statement.executeQuery();
       var results = (T[]) entityMapper.map(rs, entityClass.arrayType());
       return results.length > 0 ? results[0] : null;
-    } finally {
-      close();
-    }
+    });
   }
 
   public T[] getResultList() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
-    replaceParameters();
-    var start = System.currentTimeMillis();
-    try (var statement = connection.prepareStatement(finalQuery)) {
-      log.debug("Prepare statement: executed in " + (System.currentTimeMillis() - start) + "ms");
-      start = System.currentTimeMillis();
-      setStatementParameters(statement);
-      log.debug("Set statement parameters: executed in " + (System.currentTimeMillis() - start) + "ms");
-      start = System.currentTimeMillis();
-      var rs = statement.executeQuery();
-      log.debug("Execute query: executed in " + (System.currentTimeMillis() - start) + "ms");
-      start = System.currentTimeMillis();
-      return (T[]) entityMapper.map(rs, entityClass.arrayType());
-    } finally {
-      close();
-    }
+    return runQuery(statement -> (T[]) entityMapper.map(statement.executeQuery(), entityClass.arrayType()));
   }
 
   public void setParameter(String name, Object param) {
@@ -132,14 +112,27 @@ public class DatabaseStatement<T> {
   }
 
   public boolean execute() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
+    return runQuery(PreparedStatement::execute);
+  }
+
+  /**
+   * Runs a query against a fresh prepared statement built from the current
+   * query/parameters, closing the connection afterwards regardless of outcome.
+   */
+  private <R> R runQuery(SqlFunction<R> action) throws SQLException {
+    log.debug("{}{}", EXECUTING_QUERY_DEBUG_TEXT, fileName);
     replaceParameters();
     try (var statement = connection.prepareStatement(finalQuery)) {
       setStatementParameters(statement);
-      return statement.execute();
+      return action.apply(statement);
     } finally {
       close();
     }
+  }
+
+  @FunctionalInterface
+  private interface SqlFunction<R> {
+    R apply(PreparedStatement statement) throws SQLException;
   }
 
   public void addBatch() throws SQLException {
@@ -154,7 +147,7 @@ public class DatabaseStatement<T> {
   public T[] executeBatch() throws SQLException {
     try {
       if (batchStatement != null) {
-        log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
+        log.debug("{}{}", EXECUTING_QUERY_DEBUG_TEXT, fileName);
         batchStatement.executeBatch();
         if (entityClass != null && entityClass != Void.TYPE) {
           return (T[]) entityMapper.map(batchStatement.getGeneratedKeys(), entityClass.arrayType());
@@ -176,7 +169,7 @@ public class DatabaseStatement<T> {
 
   private void close() throws SQLException {
     connection.close();
-    log.debug("Query: " + fileName + " executed in " + (System.currentTimeMillis() - startTime) + "ms");
+    log.debug("Query: {} executed in {}ms", fileName, System.currentTimeMillis() - startTime);
   }
 
   public void closeStatement() throws SQLException {
@@ -210,35 +203,25 @@ public class DatabaseStatement<T> {
   }
 
   public T getSingleValue() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
-    replaceParameters();
-
-    try (var statement = connection.prepareStatement(finalQuery)) {
-      setStatementParameters(statement);
+    return runQuery(statement -> {
       var rs = statement.executeQuery();
       rs.next();
       return (T) rs.getObject(1);
-    } finally {
-      close();
-    }
+    });
   }
 
   public T[] getSingleValueList() throws SQLException {
-    log.debug(EXECUTING_QUERY_DEBUG_TEXT + fileName);
-    replaceParameters();
-    try (var statement = connection.prepareStatement(finalQuery)) {
-      setStatementParameters(statement);
-      var list = new ArrayList<T>();
-      var rs = statement.executeQuery();
-      while (rs.next()) {
-        list.add((T) rs.getObject(1));
+    return runQuery(statement -> {
+      try {
+        var list = new ArrayList<T>();
+        var rs = statement.executeQuery();
+        while (rs.next()) {
+          list.add((T) rs.getObject(1));
+        }
+        return list.toArray((T[]) Array.newInstance(entityClass, 0));
+      } catch (SQLException e) {
+        return (T[]) Array.newInstance(entityClass, 0);
       }
-      return list.toArray((T[]) Array.newInstance(entityClass, 0));
-    } catch (SQLException e) {
-      return (T[]) Array.newInstance(entityClass, 0);
-    } finally {
-      close();
-    }
-
+    });
   }
 }
