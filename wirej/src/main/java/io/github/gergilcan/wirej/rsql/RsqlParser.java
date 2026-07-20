@@ -143,6 +143,8 @@ public class RsqlParser {
     switch (operator) {
       case RSQLOperators.EQUAL:
         return " = ";
+      case RSQLOperators.NOT_EQUAL:
+        return " != ";
       case RSQLOperators.GREATER_THAN:
         return " > ";
       case RSQLOperators.GREATER_THAN_OR_EQUAL:
@@ -151,6 +153,10 @@ public class RsqlParser {
         return " <= ";
       case RSQLOperators.LESS_THAN:
         return " < ";
+      case RSQLOperators.IN:
+        return " LIKE ";
+      case RSQLOperators.NOT_IN:
+        return " NOT LIKE ";
       default:
         break;
     }

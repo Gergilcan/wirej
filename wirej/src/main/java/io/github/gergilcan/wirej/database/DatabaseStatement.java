@@ -38,6 +38,7 @@ public class DatabaseStatement<T> {
   private PostgresEntityMapper entityMapper = new PostgresEntityMapper();
   private long startTime;
   private String fileName;
+  private ConnectionHandler connectionHandler;
 
   public DatabaseStatement(String fileName, ConnectionHandler connectionHandler) throws IOException, SQLException {
     this(fileName, null, connectionHandler);
@@ -45,20 +46,9 @@ public class DatabaseStatement<T> {
 
   public DatabaseStatement(String fileName, Class<?> entityClass, ConnectionHandler connectionHandler)
       throws IOException, SQLException {
-    this.fileName = fileName;
     this.entityClass = entityClass;
-
-    try (var file = getClass().getResourceAsStream(fileName)) {
-      startTime = System.currentTimeMillis();
-
-      if (file == null) {
-        throw new IOException("File not found: " + fileName);
-      }
-
-      originalQuery = new String(file.readAllBytes());
-      connection = connectionHandler.getConnection();
-      log.debug("Statement and connection created: executed in {}ms", System.currentTimeMillis() - startTime);
-    }
+    loadQueryFile(fileName);
+    openConnection(connectionHandler);
   }
 
   public DatabaseStatement(String fileName, RequestFilters filters, Class<?> entityClass,
@@ -73,7 +63,8 @@ public class DatabaseStatement<T> {
 
   public DatabaseStatement(String fileName, RequestFilters filters, RequestPagination pagination,
       Class<?> entityClass, RsqlParser parser, ConnectionHandler connectionHandler) throws IOException, SQLException {
-    this(fileName, entityClass, connectionHandler);
+    this.entityClass = entityClass;
+    loadQueryFile(fileName);
 
     if (pagination != null) {
       setParameter("initialPosition", pagination.getPageNumber() * pagination.getPageSize());
@@ -93,6 +84,29 @@ public class DatabaseStatement<T> {
               ? parser.parseSorting(filters.getSort(), entityClass)
               : "");
     }
+
+    // Acquired last, once filter/sort parsing (which can throw on malformed
+    // input) is done, so a bad filter never leaves a connection stranded open.
+    openConnection(connectionHandler);
+  }
+
+  private void loadQueryFile(String fileName) throws IOException {
+    this.fileName = fileName;
+    try (var file = getClass().getResourceAsStream(fileName)) {
+      startTime = System.currentTimeMillis();
+
+      if (file == null) {
+        throw new IOException("File not found: " + fileName);
+      }
+
+      originalQuery = new String(file.readAllBytes());
+    }
+  }
+
+  private void openConnection(ConnectionHandler connectionHandler) {
+    this.connectionHandler = connectionHandler;
+    connection = connectionHandler.getConnection();
+    log.debug("Statement and connection created: executed in {}ms", System.currentTimeMillis() - startTime);
   }
 
   public T getResult() throws SQLException {
@@ -167,8 +181,8 @@ public class DatabaseStatement<T> {
     return null;
   }
 
-  private void close() throws SQLException {
-    connection.close();
+  private void close() {
+    connectionHandler.releaseConnection(connection);
     log.debug("Query: {} executed in {}ms", fileName, System.currentTimeMillis() - startTime);
   }
 
@@ -177,8 +191,8 @@ public class DatabaseStatement<T> {
       batchStatement.close();
       batchStatement = null;
     }
-    if (connection != null && !connection.isClosed()) {
-      connection.close();
+    if (connection != null) {
+      connectionHandler.releaseConnection(connection);
       connection = null;
     }
   }

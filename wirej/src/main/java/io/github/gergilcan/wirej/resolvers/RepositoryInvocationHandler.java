@@ -20,7 +20,9 @@ import io.github.gergilcan.wirej.database.ConnectionHandler;
 import io.github.gergilcan.wirej.database.DatabaseStatement;
 import io.github.gergilcan.wirej.exceptions.WireJException;
 import io.github.gergilcan.wirej.rsql.RsqlParser;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class RepositoryInvocationHandler implements InvocationHandler {
     // Date is intentionally checked separately (via instanceof below) since it is
     // not final: java.sql.Date and java.sql.Time are also basic types.
@@ -52,8 +54,9 @@ public class RepositoryInvocationHandler implements InvocationHandler {
         // generated repository interfaces don't declare them: left unchecked, the
         // JDK proxy would swallow the real error into a message-less
         // UndeclaredThrowableException instead of surfacing what actually failed.
+        DatabaseStatement<Object> databaseStatement = null;
         try {
-            var databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
+            databaseStatement = new DatabaseStatement<>(fileName, filters, pagination,
                     entityClass, rsqlParser, connectionHandler);
 
             setStatementParameters(method, args, databaseStatement, isBatch);
@@ -68,9 +71,28 @@ public class RepositoryInvocationHandler implements InvocationHandler {
                 return databaseStatement.executeBatch();
             }
         } catch (IOException | SQLException e) {
+            // Query methods (getResult/execute/...) always close their own
+            // connection, on success or failure. This catches failures that happen
+            // *before* one of them is reached (e.g. binding parameters), where
+            // nothing else would ever release the connection that was opened.
+            closeQuietly(databaseStatement);
             throw new WireJException("Query failed for repository method '" + method.getName()
                     + "' (query file: " + fileName + ", entity: " + entityClass.getSimpleName() + "): "
                     + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            closeQuietly(databaseStatement);
+            throw e;
+        }
+    }
+
+    private void closeQuietly(DatabaseStatement<?> databaseStatement) {
+        if (databaseStatement == null) {
+            return;
+        }
+        try {
+            databaseStatement.closeStatement();
+        } catch (SQLException closeException) {
+            log.warn("Failed to close database statement after an earlier failure", closeException);
         }
     }
 
