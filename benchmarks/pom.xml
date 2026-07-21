@@ -18,11 +18,12 @@
 
     <properties>
         <jmh.version>1.37</jmh.version>
-        <!-- Internal benchmarking tool only -->
+        <!-- Internal benchmarking tool only - never published to Maven Central -->
         <maven.deploy.skip>true</maven.deploy.skip>
         <gpg.skip>true</gpg.skip>
         <maven.javadoc.skip>true</maven.javadoc.skip>
         <maven.source.skip>true</maven.source.skip>
+        <skipPublishing>true</skipPublishing>
     </properties>
 
     <dependencies>

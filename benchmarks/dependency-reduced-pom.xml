@@ -74,6 +74,7 @@
   </dependencies>
   <properties>
     <jmh.version>1.37</jmh.version>
+    <skipPublishing>true</skipPublishing>
     <maven.source.skip>true</maven.source.skip>
     <gpg.skip>true</gpg.skip>
     <maven.deploy.skip>true</maven.deploy.skip>
