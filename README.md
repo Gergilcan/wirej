@@ -5,16 +5,16 @@
 [![Java](https://img.shields.io/badge/Java-21+-orange)](https://openjdk.java.net/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5+-green)](```bash
 
-**WireJ** is a lightweight Java framework that simplifies Spring Boot development by allowing you to write **interface-based controllers** and **SQL-file-based repositories** with compile-time validation. It eliminates boilerplate code while providing type safety and IDE support.
+**WireJ** is a lightweight Java framework that simplifies Spring Boot development by allowing you to write **interface-based controllers** and **SQL-file-based repositories**, with a compile-time annotation processor that validates and generates their implementations. It eliminates boilerplate code while providing type safety and IDE support.
 
 ## 🚀 What is WireJ?
 
 WireJ transforms how you write Spring Boot applications by:
 
-- **🎯 Interface Controllers**: Write REST controllers as interfaces that automatically proxy to your services
+- **🎯 Interface Controllers**: Write REST controllers as interfaces; a real implementation class is generated at compile time and wired to your services
 - **📄 SQL File Repositories**: Define repositories that use external SQL files for queries
-- **✅ Compile-time Validation**: Annotation processors ensure your method signatures and SQL files exist at build time
-- **🔧 Zero Configuration**: Works out-of-the-box with Spring Boot auto-configuration
+- **✅ Compile-time Validation & Code Generation**: An annotation processor validates your method signatures and SQL files exist, then generates the implementation classes at build time — no reflection or dynamic proxies at runtime, so you get real stack traces and can set breakpoints in the generated code
+- **🔧 Zero Configuration**: Generated implementation classes are picked up by Spring Boot's own component scan; the library only needs its own auto-configuration to register a couple of internal support beans
 - **🎨 Clean Architecture**: Promotes separation of concerns and testable code
 
 ## 📦 Installation
@@ -30,13 +30,13 @@ Add WireJ to your Spring Boot project:
     <version>1.0.1</version>
 </dependency>
 
-<!-- For compile-time validation (recommended) -->
+<!-- Required: generates the controller/repository implementation classes at compile time.
+     Without it, your @Repository/@RestController interfaces have no implementation. -->
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej-processor</artifactId>
     <version>1.0.1</version>
     <scope>provided</scope>
-    <optional>true</optional>
 </dependency>
 ```
 
@@ -192,12 +192,11 @@ public interface UserController {
 
 ### 6. That's it!
 
-WireJ will automatically:
+At compile time, WireJ will automatically:
 
-- ✅ Create proxy implementations for your controller interfaces
-- ✅ Wire them to your services using method name matching
-- ✅ Validate at compile-time that methods exist and SQL files are present
-- ✅ Generate proper Spring beans and register them
+- ✅ Validate that your service methods and SQL files exist and have matching signatures
+- ✅ Generate a real implementation class for each controller/repository interface, wired to your services using method name matching
+- ✅ Annotate the generated classes so Spring's own component scan picks them up as ordinary beans — no custom registration needed
 
 ## 🔄 Migration Guide
 
@@ -300,14 +299,16 @@ WHERE id = :id
 - **IDE Support**: Syntax highlighting and validation in SQL files
 - **Named Parameters**: Use `:paramName` syntax for parameters
 
-### Compile-Time Validation
+### Compile-Time Validation & Code Generation
 
-The annotation processor validates:
+The annotation processor (`wirej-processor`) runs in two steps for every `@Repository`/`@RestController` interface:
 
-- ✅ Service methods exist and have matching signatures
-- ✅ SQL files exist in the specified paths
-- ✅ Parameter names match between methods and SQL
-- ❌ Compilation fails if validation errors are found
+1. **Validates**:
+   - ✅ Service methods exist and have matching signatures
+   - ✅ SQL files exist in the specified paths
+   - ✅ The declared response body type is assignable from the resolved service method's return type
+   - ❌ Compilation fails if validation errors are found
+2. **Generates** a real `<Interface>Impl` class implementing the interface, with the dispatch logic (which SQL operation to run, how to bind each parameter) resolved once at compile time instead of via reflection on every request. This is why the processor dependency is required, not optional — without it, your interfaces have no implementation.
 
 ## 🎛️ Additional Features
 
@@ -841,7 +842,9 @@ WireJ works seamlessly with standard Spring annotations:
 
 ### Package Scanning
 
-WireJ automatically detects which packages to scan by locating your `@SpringBootApplication` class and scanning its package (and sub-packages) for controller and repository interfaces. No configuration is required.
+The `<Interface>Impl` class generated for each of your controller/repository interfaces lives in the same package as the interface itself, and carries the same `@RestController`/`@Repository` annotation. That means it's picked up by your application's own `@SpringBootApplication` component scan like any other bean — WireJ doesn't do any custom classpath scanning for these.
+
+The only things WireJ auto-configures are two internal support beans (`ConnectionHandler`, `RsqlParser`) that generated repository code depends on; these live in WireJ's own packages and are registered via Spring Boot's auto-configuration mechanism regardless of where your application class lives. No configuration is required.
 
 ## 🧪 Testing
 

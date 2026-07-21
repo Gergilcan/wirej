@@ -1,6 +1,7 @@
 package io.github.gergilcan.wirej.database;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,6 +10,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -78,16 +80,26 @@ public class DatabaseStatement<T> {
     openConnection(connectionHandler);
   }
 
+  private static final ConcurrentHashMap<String, String> QUERY_FILE_CACHE = new ConcurrentHashMap<>();
+
   private void loadQueryFile(String fileName) throws IOException {
     this.fileName = fileName;
-    try (var file = getClass().getResourceAsStream(fileName)) {
-      startTime = System.currentTimeMillis();
+    startTime = System.currentTimeMillis();
+    try {
+      originalQuery = QUERY_FILE_CACHE.computeIfAbsent(fileName, DatabaseStatement::readQueryFile);
+    } catch (UncheckedIOException e) {
+      throw e.getCause();
+    }
+  }
 
+  private static String readQueryFile(String fileName) {
+    try (var file = DatabaseStatement.class.getResourceAsStream(fileName)) {
       if (file == null) {
-        throw new IOException("File not found: " + fileName);
+        throw new UncheckedIOException(new IOException("File not found: " + fileName));
       }
-
-      originalQuery = new String(file.readAllBytes());
+      return new String(file.readAllBytes());
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
     }
   }
 
@@ -178,6 +190,17 @@ public class DatabaseStatement<T> {
     if (connection != null) {
       connectionHandler.releaseConnection(connection);
       connection = null;
+    }
+  }
+
+  public static void closeQuietly(DatabaseStatement<?> statement) {
+    if (statement == null) {
+      return;
+    }
+    try {
+      statement.closeStatement();
+    } catch (SQLException e) {
+      log.warn("Failed to close database statement after an earlier failure", e);
     }
   }
 

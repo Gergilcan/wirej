@@ -41,8 +41,4 @@ public class UsersService {
     public String describeAny(Object value) {
         return String.valueOf(value);
     }
-
-    public Long countSomething() {
-        return 42L;
-    }
 }

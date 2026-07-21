@@ -56,9 +56,4 @@ public interface UserController2 {
     @ServiceMethod("describeAny")
     @ResponseStatus(HttpStatus.OK)
     ResponseEntity<?> describeAny(@RequestParam String value);
-
-    @GetMapping("/count-something")
-    @ServiceMethod("countSomething")
-    @ResponseStatus(HttpStatus.OK)
-    ResponseEntity<String> countSomethingMismatched();
 }

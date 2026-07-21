@@ -60,6 +60,7 @@
         <module>annotations</module>
         <module>processor</module>
         <module>wirej</module>
+        <module>benchmarks</module>
     </modules>
 
     <build>

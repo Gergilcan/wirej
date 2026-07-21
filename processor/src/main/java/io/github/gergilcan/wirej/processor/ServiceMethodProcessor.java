@@ -16,7 +16,9 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.StandardLocation;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,28 +33,29 @@ import java.util.stream.Collectors;
 @AutoService(Processor.class)
 public class ServiceMethodProcessor extends AbstractProcessor {
     private Messager messager;
+    private ControllerImplGenerator controllerImplGenerator;
+    private RepositoryImplGenerator repositoryImplGenerator;
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
         messager = processingEnv.getMessager();
-        // Only print if this is not a subsequent round to reduce noise
+        controllerImplGenerator = new ControllerImplGenerator(processingEnv.getFiler(), messager,
+                processingEnv.getElementUtils());
+        repositoryImplGenerator = new RepositoryImplGenerator(processingEnv.getFiler(), messager,
+                processingEnv.getElementUtils());
         messager.printMessage(Diagnostic.Kind.NOTE, "ServiceMethodProcessor initialized.");
     }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        // Skip processing if this is a subsequent round with no new files
         if (roundEnv.processingOver()) {
             return false;
         }
 
         messager.printMessage(Diagnostic.Kind.NOTE, "Starting new processing round.");
 
-        // Process @ServiceMethod annotations
         processServiceMethodAnnotations(roundEnv);
-
-        // Process @QueryFile annotations
         processQueryFileAnnotations(roundEnv);
 
         messager.printMessage(Diagnostic.Kind.NOTE, "Finished processing round.");
@@ -65,40 +68,63 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         messager.printMessage(Diagnostic.Kind.NOTE,
                 "Found " + annotatedElements.size() + " elements annotated with @ServiceMethod in this round.");
 
-        for (Element annotatedElement : annotatedElements) {
-            if (annotatedElement.getKind() != ElementKind.METHOD) {
-                continue;
-            }
+        Map<TypeElement, List<ExecutableElement>> methodsByInterface = annotatedElements.stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .map(ExecutableElement.class::cast)
+                .collect(Collectors.groupingBy(method -> (TypeElement) method.getEnclosingElement()));
 
-            ExecutableElement annotatedMethod = (ExecutableElement) annotatedElement;
-            TypeElement enclosingClass = (TypeElement) annotatedMethod.getEnclosingElement();
-            ServiceClass serviceClassAnnotation = enclosingClass.getAnnotation(ServiceClass.class);
-            ServiceMethod serviceMethodAnnotation = annotatedMethod.getAnnotation(ServiceMethod.class);
+        for (var entry : methodsByInterface.entrySet()) {
+            TypeElement controllerInterface = entry.getKey();
+            List<ExecutableElement> controllerMethods = entry.getValue();
 
+            ServiceClass serviceClassAnnotation = controllerInterface.getAnnotation(ServiceClass.class);
             if (serviceClassAnnotation == null) {
-                error(enclosingClass,
+                error(controllerInterface,
                         "The class/interface containing @ServiceMethod must be annotated with @ServiceClass.");
                 continue;
             }
 
             TypeMirror targetServiceClassMirror = getServiceClassValue(serviceClassAnnotation);
-            String targetMethodName = serviceMethodAnnotation.value();
-
-            // If @ServiceMethod value is empty, use the annotated method name
-            if (targetMethodName == null || targetMethodName.trim().isEmpty()) {
-                targetMethodName = annotatedMethod.getSimpleName().toString();
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                        "Using method name '" + targetMethodName + "' for @ServiceMethod on " +
-                                annotatedMethod.getSimpleName());
-            }
-
             if (targetServiceClassMirror == null) {
-                error(enclosingClass,
-                        "Could not resolve target service class for @ServiceClass annotation.");
+                error(controllerInterface, "Could not resolve target service class for @ServiceClass annotation.");
                 continue;
             }
 
-            validateMethodExists(annotatedMethod, targetServiceClassMirror, targetMethodName);
+            List<ControllerImplGenerator.ResolvedMethod> resolvedMethods = new ArrayList<>();
+            boolean allResolved = true;
+
+            for (ExecutableElement annotatedMethod : controllerMethods) {
+                ServiceMethod serviceMethodAnnotation = annotatedMethod.getAnnotation(ServiceMethod.class);
+                String targetMethodName = serviceMethodAnnotation.value();
+
+                if (targetMethodName == null || targetMethodName.trim().isEmpty()) {
+                    targetMethodName = annotatedMethod.getSimpleName().toString();
+                    messager.printMessage(Diagnostic.Kind.NOTE,
+                            "Using method name '" + targetMethodName + "' for @ServiceMethod on " +
+                                    annotatedMethod.getSimpleName());
+                }
+
+                Optional<ExecutableElement> matchingMethod = findMatchingMethod(annotatedMethod,
+                        targetServiceClassMirror, targetMethodName);
+
+                if (matchingMethod.isEmpty()) {
+                    String paramsString = annotatedMethod.getParameters().stream()
+                            .map(p -> p.asType().toString())
+                            .collect(Collectors.joining(", "));
+                    error(annotatedMethod, "Method '%s(%s)' does not exist in class %s", targetMethodName,
+                            paramsString, targetServiceClassMirror.toString());
+                    allResolved = false;
+                    continue;
+                }
+
+                checkReturnTypeCompatible(annotatedMethod, matchingMethod.get(), targetMethodName,
+                        targetServiceClassMirror);
+                resolvedMethods.add(new ControllerImplGenerator.ResolvedMethod(annotatedMethod, matchingMethod.get()));
+            }
+
+            if (allResolved) {
+                controllerImplGenerator.generate(controllerInterface, targetServiceClassMirror, resolvedMethods);
+            }
         }
     }
 
@@ -108,36 +134,47 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         messager.printMessage(Diagnostic.Kind.NOTE,
                 "Found " + annotatedElements.size() + " elements annotated with @QueryFile in this round.");
 
-        for (Element annotatedElement : annotatedElements) {
-            if (annotatedElement.getKind() != ElementKind.METHOD) {
-                continue;
+        Map<TypeElement, List<ExecutableElement>> methodsByInterface = annotatedElements.stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .map(ExecutableElement.class::cast)
+                .collect(Collectors.groupingBy(method -> (TypeElement) method.getEnclosingElement()));
+
+        for (var entry : methodsByInterface.entrySet()) {
+            TypeElement repositoryInterface = entry.getKey();
+            List<ExecutableElement> methods = entry.getValue();
+            boolean allValid = true;
+
+            for (ExecutableElement annotatedMethod : methods) {
+                QueryFile queryFileAnnotation = annotatedMethod.getAnnotation(QueryFile.class);
+                String queryFilePath = queryFileAnnotation.value();
+                if (queryFilePath == null || queryFilePath.trim().isEmpty()) {
+                    error(annotatedMethod, "@QueryFile annotation must specify a file path");
+                    allValid = false;
+                    continue;
+                }
+
+                String resourcePath = queryFilePath.startsWith("/") ? queryFilePath.substring(1) : queryFilePath;
+                if (!validateQueryFileExists(annotatedMethod, resourcePath)) {
+                    allValid = false;
+                }
             }
 
-            ExecutableElement annotatedMethod = (ExecutableElement) annotatedElement;
-            QueryFile queryFileAnnotation = annotatedMethod.getAnnotation(QueryFile.class);
-
-            String queryFilePath = queryFileAnnotation.value();
-            if (queryFilePath == null || queryFilePath.trim().isEmpty()) {
-                error(annotatedMethod, "@QueryFile annotation must specify a file path");
-                continue;
+            if (allValid) {
+                repositoryImplGenerator.generate(repositoryInterface, methods);
             }
-
-            // Remove leading slash if present and validate file exists in resources
-            String resourcePath = queryFilePath.startsWith("/") ? queryFilePath.substring(1) : queryFilePath;
-            validateQueryFileExists(annotatedMethod, resourcePath);
         }
     }
 
     private static final List<StandardLocation> RESOURCE_LOOKUP_LOCATIONS = List.of(
             StandardLocation.ANNOTATION_PROCESSOR_PATH, StandardLocation.CLASS_PATH, StandardLocation.CLASS_OUTPUT);
 
-    private void validateQueryFileExists(ExecutableElement method, String resourcePath) {
+    private boolean validateQueryFileExists(ExecutableElement method, String resourcePath) {
         for (StandardLocation location : RESOURCE_LOOKUP_LOCATIONS) {
             try (var in = processingEnv.getFiler().getResource(location, "", resourcePath).openInputStream()) {
                 messager.printMessage(Diagnostic.Kind.NOTE,
                         "✓ Found query file: " + resourcePath + " in " + location + " for method "
                                 + method.getSimpleName());
-                return;
+                return true;
             } catch (IOException e) {
             }
         }
@@ -147,31 +184,22 @@ public class ServiceMethodProcessor extends AbstractProcessor {
                 ". This might be normal if the resource hasn't been processed yet. " +
                 "Ensure the file exists in src/main/resources/" + resourcePath +
                 " or src/test/resources/" + resourcePath);
+        return false;
     }
 
-    private void validateMethodExists(ExecutableElement sourceMethod, TypeMirror targetClass, String methodName) {
+    private Optional<ExecutableElement> findMatchingMethod(ExecutableElement sourceMethod, TypeMirror targetClass,
+            String methodName) {
         TypeElement targetClassElement = (TypeElement) processingEnv.getTypeUtils().asElement(targetClass);
         Types typeUtils = processingEnv.getTypeUtils();
 
         List<? extends TypeMirror> sourceParamTypes = sourceMethod.getParameters().stream()
                 .map(VariableElement::asType).toList();
 
-        Optional<ExecutableElement> matchingMethod = targetClassElement.getEnclosedElements().stream()
+        return targetClassElement.getEnclosedElements().stream()
                 .filter(element -> element.getKind() == ElementKind.METHOD)
                 .map(ExecutableElement.class::cast)
                 .filter(targetMethod -> isCompatibleMethod(typeUtils, sourceParamTypes, targetMethod, methodName))
                 .findFirst();
-
-        if (matchingMethod.isEmpty()) {
-            String paramsString = sourceParamTypes.stream()
-                    .map(TypeMirror::toString)
-                    .collect(Collectors.joining(", "));
-            error(sourceMethod, "Method '%s(%s)' does not exist in class %s", methodName, paramsString,
-                    targetClass.toString());
-            return;
-        }
-
-        checkReturnTypeCompatible(sourceMethod, matchingMethod.get(), methodName, targetClass);
     }
 
     private boolean isCompatibleMethod(Types typeUtils, List<? extends TypeMirror> sourceParamTypes,
@@ -212,7 +240,11 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         }
 
         if (!processingEnv.getTypeUtils().isAssignable(actualReturnType, expectedBodyType)) {
-            warn(sourceMethod,
+            // The generated controller impl calls ResponseEntity.status(...).body(result) with the service
+            // method's actual return type, so a mismatch here is always a hard compile failure downstream.
+            // Reporting it as an error here, against the user's own interface method, gives a much clearer
+            // diagnostic than the generic-inference error javac would otherwise raise inside generated code.
+            error(sourceMethod,
                     "Method '%s' in class %s returns %s, which is not assignable to the declared response body type %s",
                     methodName, targetClass.toString(), actualReturnType.toString(), expectedBodyType.toString());
         }
@@ -230,13 +262,6 @@ public class ServiceMethodProcessor extends AbstractProcessor {
     private void error(Element e, String msg, Object... args) {
         messager.printMessage(
                 Diagnostic.Kind.ERROR,
-                String.format(msg, args),
-                e);
-    }
-
-    private void warn(Element e, String msg, Object... args) {
-        messager.printMessage(
-                Diagnostic.Kind.WARNING,
                 String.format(msg, args),
                 e);
     }

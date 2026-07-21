@@ -1,3 +1,1 @@
-# Replace with the actual package of your ProxyControllerAutoConfiguration
-io.github.gergilcan.wirej.resolvers.ProxyControllerAutoConfiguration
-io.github.gergilcan.wirej.resolvers.ProxyRepositoryAutoConfiguration
+io.github.gergilcan.wirej.resolvers.WireJAutoConfiguration

@@ -42,6 +42,13 @@
             <version>0.0.6</version>
         </dependency>
 
+        <!-- RSQL grammar for parsing RequestFilters.filters -->
+        <dependency>
+            <groupId>cz.jirutka.rsql</groupId>
+            <artifactId>rsql-parser</artifactId>
+            <version>2.1.0</version>
+        </dependency>
+
         <!-- Annotation Processor for design-time IDE support -->
         <dependency>
             <groupId>io.github.gergilcan</groupId>

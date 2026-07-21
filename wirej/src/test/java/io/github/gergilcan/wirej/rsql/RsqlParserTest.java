@@ -40,23 +40,23 @@ class RsqlParserTest {
     void equalsOperatorProducesEqualityClauseAndBindsValue() {
         String where = parser.parse("name==John", User.class, statement);
 
-        assertThat(where).isEqualTo("(name = :filter_value_1)");
+        assertThat(where).isEqualTo("name = :filter_value_1");
         verify(statement).setParameter("filter_value_1", "John");
     }
 
     @Test
     void comparisonOperatorsProduceCorrectSql() {
-        assertThat(parser.parse("id>5", User.class, statement)).isEqualTo("(id > :filter_value_1)");
-        assertThat(parser.parse("id>=5", User.class, statement)).isEqualTo("(id >= :filter_value_1)");
-        assertThat(parser.parse("id<5", User.class, statement)).isEqualTo("(id < :filter_value_1)");
-        assertThat(parser.parse("id<=5", User.class, statement)).isEqualTo("(id <= :filter_value_1)");
+        assertThat(parser.parse("id>5", User.class, statement)).isEqualTo("id > :filter_value_1");
+        assertThat(parser.parse("id>=5", User.class, statement)).isEqualTo("id >= :filter_value_1");
+        assertThat(parser.parse("id<5", User.class, statement)).isEqualTo("id < :filter_value_1");
+        assertThat(parser.parse("id<=5", User.class, statement)).isEqualTo("id <= :filter_value_1");
     }
 
     @Test
     void notEqualOperatorProducesCorrectSql() {
         String where = parser.parse("name!=John", User.class, statement);
 
-        assertThat(where).isEqualTo("(name != :filter_value_1)");
+        assertThat(where).isEqualTo("name != :filter_value_1");
         verify(statement).setParameter("filter_value_1", "John");
     }
 
@@ -64,7 +64,7 @@ class RsqlParserTest {
     void inOperatorProducesLikeClauseWithWildcardWrappedValue() {
         String where = parser.parse("name=in=John", User.class, statement);
 
-        assertThat(where).isEqualTo("(name LIKE :filter_value_1)");
+        assertThat(where).isEqualTo("name LIKE :filter_value_1");
         verify(statement).setParameter("filter_value_1", "%John%");
     }
 
@@ -72,7 +72,7 @@ class RsqlParserTest {
     void notInOperatorProducesNotLikeClauseWithWildcardWrappedValue() {
         String where = parser.parse("name=out=John", User.class, statement);
 
-        assertThat(where).isEqualTo("(name NOT LIKE :filter_value_1)");
+        assertThat(where).isEqualTo("name NOT LIKE :filter_value_1");
         verify(statement).setParameter("filter_value_1", "%John%");
     }
 
@@ -80,7 +80,7 @@ class RsqlParserTest {
     void semicolonSeparatedClausesAreCombinedWithAnd() {
         String where = parser.parse("id==1;name==John", User.class, statement);
 
-        assertThat(where).isEqualTo("(id = :filter_value_1) AND (name = :filter_value_2)");
+        assertThat(where).isEqualTo("(id = :filter_value_1 AND name = :filter_value_2)");
     }
 
     @Test
@@ -91,10 +91,26 @@ class RsqlParserTest {
     }
 
     @Test
+    void parenthesizedGroupsAreRespectedRatherThanFlattened() {
+        String where = parser.parse("(id==1;name==John),id==2", User.class, statement);
+
+        assertThat(where).isEqualTo(
+                "((id = :filter_value_1 AND name = :filter_value_2) OR id = :filter_value_3)");
+    }
+
+    @Test
+    void unparenthesizedMixedFiltersFollowStandardRsqlPrecedenceAndBindsTighterThanOr() {
+        String where = parser.parse("id==1,name==John;id==2", User.class, statement);
+
+        assertThat(where).isEqualTo(
+                "(id = :filter_value_1 OR (name = :filter_value_2 AND id = :filter_value_3))");
+    }
+
+    @Test
     void dateValuedClauseIsWrappedWithDateFunction() {
         String where = parser.parse("id==2024-01-15", User.class, statement);
 
-        assertThat(where).isEqualTo("(DATE(id) = :filter_value_1)");
+        assertThat(where).isEqualTo("DATE(id) = :filter_value_1");
         verify(statement).setParameter(eq("filter_value_1"), any(Timestamp.class));
     }
 
@@ -102,7 +118,7 @@ class RsqlParserTest {
     void jsonAliasIsUsedAsTheColumnNameWhenPresent() {
         String where = parser.parse("name==John", AliasedEntity.class, statement);
 
-        assertThat(where).isEqualTo("(full_name = :filter_value_1)");
+        assertThat(where).isEqualTo("full_name = :filter_value_1");
     }
 
     @Test

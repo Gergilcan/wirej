@@ -28,6 +28,13 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Source generation for the compile-time Repository/Controller impl generators -->
+        <dependency>
+            <groupId>com.squareup</groupId>
+            <artifactId>javapoet</artifactId>
+            <version>1.13.0</version>
+        </dependency>
+
         <!-- Dependency on the annotations module -->
         <dependency>
             <groupId>io.github.gergilcan</groupId>
