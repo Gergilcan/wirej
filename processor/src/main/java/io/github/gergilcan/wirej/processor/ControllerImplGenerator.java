@@ -12,6 +12,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
@@ -40,7 +41,8 @@ final class ControllerImplGenerator {
     private static final String SERVICE_CLASS = ServiceClass.class.getCanonicalName();
     private static final String RESPONSE_STATUS = "org.springframework.web.bind.annotation.ResponseStatus";
 
-    record ResolvedMethod(ExecutableElement controllerMethod, ExecutableElement serviceMethod) {
+    record ResolvedMethod(ExecutableElement controllerMethod, ExecutableType controllerMethodType,
+            ExecutableElement serviceMethod) {
     }
 
     private final Filer filer;
@@ -90,12 +92,13 @@ final class ControllerImplGenerator {
 
     private MethodSpec buildMethod(ResolvedMethod resolved) {
         ExecutableElement controllerMethod = resolved.controllerMethod();
+        ExecutableType controllerMethodType = resolved.controllerMethodType();
         ExecutableElement serviceMethod = resolved.serviceMethod();
 
         MethodSpec.Builder method = MethodSpec.methodBuilder(controllerMethod.getSimpleName().toString())
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(TypeName.get(controllerMethod.getReturnType()));
+                .returns(TypeName.get(controllerMethodType.getReturnType()));
 
         for (AnnotationMirror mirror : controllerMethod.getAnnotationMirrors()) {
             if (isAnnotation(mirror, SERVICE_METHOD)) {
@@ -104,10 +107,16 @@ final class ControllerImplGenerator {
             method.addAnnotation(AnnotationSpec.get(mirror));
         }
 
-        List<String> argNames = controllerMethod.getParameters().stream()
-                .map(p -> p.getSimpleName().toString()).toList();
-        for (VariableElement parameter : controllerMethod.getParameters()) {
-            ParameterSpec.Builder parameterBuilder = ParameterSpec.builder(TypeName.get(parameter.asType()),
+        // Parameter NAMES/ANNOTATIONS come from the declared element, but the TYPE must come from
+        // controllerMethodType - for a method inherited from a generic interface (e.g.
+        // StandardRestRepository<T, ID>), parameter.asType() would still show the raw type variable
+        // (ID), while controllerMethodType has it substituted to the concrete type (Long).
+        List<? extends VariableElement> parameters = controllerMethod.getParameters();
+        List<? extends TypeMirror> parameterTypes = controllerMethodType.getParameterTypes();
+        List<String> argNames = parameters.stream().map(p -> p.getSimpleName().toString()).toList();
+        for (int i = 0; i < parameters.size(); i++) {
+            VariableElement parameter = parameters.get(i);
+            ParameterSpec.Builder parameterBuilder = ParameterSpec.builder(TypeName.get(parameterTypes.get(i)),
                     parameter.getSimpleName().toString());
             for (AnnotationMirror mirror : parameter.getAnnotationMirrors()) {
                 parameterBuilder.addAnnotation(AnnotationSpec.get(mirror));
