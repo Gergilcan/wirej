@@ -27,7 +27,7 @@ Add WireJ to your Spring Boot project:
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.4</version>
 </dependency>
 
 <!-- Required: generates the controller/repository implementation classes at compile time.
@@ -35,7 +35,7 @@ Add WireJ to your Spring Boot project:
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej-processor</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.4</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -43,8 +43,8 @@ Add WireJ to your Spring Boot project:
 ### Gradle
 
 ```gradle
-implementation 'io.github.gergilcan:wirej:1.0.2'
-annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.2'
+implementation 'io.github.gergilcan:wirej:1.0.4'
+annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.4'
 ```
 
 ### Maven Compiler Configuration (Required for Annotation Processing)
@@ -63,7 +63,7 @@ annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.2'
                     <path>
                         <groupId>io.github.gergilcan</groupId>
                         <artifactId>wirej-processor</artifactId>
-                        <version>1.0.2</version>
+                        <version>1.0.4</version>
                     </path>
                 </annotationProcessorPaths>
             </configuration>
@@ -71,6 +71,57 @@ annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.2'
     </plugins>
 </build>
 ```
+
+### VS Code Setup (Recommended)
+
+Out of the box, VS Code shows phantom `cannot be resolved` errors on WireJ's generated `*Impl.java`
+files — they look broken until you open them or force a full recompile, and they block <kbd>F5</kbd>
+even though the Maven build is completely clean.
+
+**Two settings are required to fix it. Each one alone is not enough.**
+
+**1.** In your `pom.xml`:
+
+```xml
+<properties>
+    <m2e.apt.activation>disabled</m2e.apt.activation>
+</properties>
+```
+
+**2.** In your `.vscode/settings.json` (commit it so the whole team gets it):
+
+```json
+{
+    "files.watcherExclude": {
+        "**/target/generated-sources/**": true,
+        "**/target/generated-test-sources/**": true
+    }
+}
+```
+
+**Why both:** VS Code's Java extension (Eclipse JDT Language Server) can end up recompiling a
+generated file *in isolation* — without the project classpath — which is what makes whole packages
+appear unresolvable. There are two independent routes to that, so both must be closed:
+
+- By default (`jdt_apt`) JDT runs the annotation processor **in-process** and reconciles the files
+  it generates. `disabled` stops m2e-apt managing annotation processing in the IDE altogether.
+- Maven still writes the generated files to disk, and the resulting **file-watcher events** trigger
+  the same faulty isolated recompile. Excluding those directories removes the events.
+
+The exclusion is scoped to the generated-sources directories rather than all of `**/target/**`, so
+the rest of `target/` stays watched and externally-built changes are still picked up.
+
+Two things worth knowing:
+
+- This is a **VS Code limitation, not a WireJ issue** — it affects Lombok and MapStruct the same
+  way ([vscode-java#2981](https://github.com/redhat-developer/vscode-java/issues/2981),
+  [#1660](https://github.com/redhat-developer/vscode-java/issues/1660)). **IntelliJ IDEA, Eclipse
+  and plain Maven/Gradle builds are unaffected** and need no configuration.
+- The trade-off: with this property set the IDE no longer runs the processor as you type, so
+  WireJ's compile-time validation (unknown service method, missing SQL file, incompatible return
+  type) surfaces on build rather than live in the editor. Validation itself is unchanged — it still
+  fails the build and CI exactly as before. **Maven and CI are not affected in any way** — the
+  processor runs on every build exactly as before; this only changes IDE behaviour.
 
 ## 🎯 Quick Start
 
