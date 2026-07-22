@@ -78,17 +78,7 @@ Out of the box, VS Code shows phantom `cannot be resolved` errors on WireJ's gen
 files — they look broken until you open them or force a full recompile, and they block <kbd>F5</kbd>
 even though the Maven build is completely clean.
 
-**Two settings are required to fix it. Each one alone is not enough.**
-
-**1.** In your `pom.xml`:
-
-```xml
-<properties>
-    <m2e.apt.activation>disabled</m2e.apt.activation>
-</properties>
-```
-
-**2.** In your `.vscode/settings.json` (commit it so the whole team gets it):
+Add this to your `.vscode/settings.json` (commit it, so the whole team gets it):
 
 ```json
 {
@@ -99,14 +89,11 @@ even though the Maven build is completely clean.
 }
 ```
 
-**Why both:** VS Code's Java extension (Eclipse JDT Language Server) can end up recompiling a
-generated file *in isolation* — without the project classpath — which is what makes whole packages
-appear unresolvable. There are two independent routes to that, so both must be closed:
-
-- By default (`jdt_apt`) JDT runs the annotation processor **in-process** and reconciles the files
-  it generates. `disabled` stops m2e-apt managing annotation processing in the IDE altogether.
-- Maven still writes the generated files to disk, and the resulting **file-watcher events** trigger
-  the same faulty isolated recompile. Excluding those directories removes the events.
+**Why:** when the annotation processor writes the generated files, those writes fire file-watcher
+events, and VS Code's Java extension (Eclipse JDT Language Server) reacts by recompiling each
+generated file **in isolation** — without the project classpath. That's what makes whole packages
+appear unresolvable. Excluding those directories removes the events, and the bogus recompiles with
+them.
 
 The exclusion is scoped to the generated-sources directories rather than all of `**/target/**`, so
 the rest of `target/` stays watched and externally-built changes are still picked up.
@@ -117,11 +104,9 @@ Two things worth knowing:
   way ([vscode-java#2981](https://github.com/redhat-developer/vscode-java/issues/2981),
   [#1660](https://github.com/redhat-developer/vscode-java/issues/1660)). **IntelliJ IDEA, Eclipse
   and plain Maven/Gradle builds are unaffected** and need no configuration.
-- The trade-off: with this property set the IDE no longer runs the processor as you type, so
-  WireJ's compile-time validation (unknown service method, missing SQL file, incompatible return
-  type) surfaces on build rather than live in the editor. Validation itself is unchanged — it still
-  fails the build and CI exactly as before. **Maven and CI are not affected in any way** — the
-  processor runs on every build exactly as before; this only changes IDE behaviour.
+- **Nothing else changes.** Annotation processing stays enabled in the IDE, so WireJ's compile-time
+  validation (unknown service method, missing SQL file, incompatible return type) still reports
+  live in the editor as you type. Maven and CI behaviour is untouched.
 
 ## 🎯 Quick Start
 
