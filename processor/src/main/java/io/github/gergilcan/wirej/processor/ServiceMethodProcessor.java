@@ -4,6 +4,7 @@ import com.google.auto.service.AutoService;
 import io.github.gergilcan.wirej.annotations.QueryFile;
 import io.github.gergilcan.wirej.annotations.ServiceClass;
 import io.github.gergilcan.wirej.annotations.ServiceMethod;
+import io.github.gergilcan.wirej.annotations.StandardOperation;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -22,6 +23,8 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,10 +32,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 // Explicitly list all annotations the processor might interact with.
+// Spring's @Repository is included so a repository interface whose only WireJ
+// surface is inherited StandardRepository methods (no @QueryFile of its own)
+// still triggers a processing round.
 @SupportedAnnotationTypes({
         "io.github.gergilcan.wirej.annotations.ServiceMethod",
         "io.github.gergilcan.wirej.annotations.ServiceClass",
-        "io.github.gergilcan.wirej.annotations.QueryFile"
+        "io.github.gergilcan.wirej.annotations.QueryFile",
+        "io.github.gergilcan.wirej.annotations.StandardOperation",
+        "org.springframework.stereotype.Repository"
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 @AutoService(Processor.class)
@@ -61,7 +69,7 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         messager.printMessage(Diagnostic.Kind.NOTE, "Starting new processing round.");
 
         processServiceMethodAnnotations(roundEnv);
-        processQueryFileAnnotations(roundEnv);
+        processRepositoryAnnotations(roundEnv);
 
         messager.printMessage(Diagnostic.Kind.NOTE, "Finished processing round.");
         return false; // Return false to allow other processors to see the annotations
@@ -134,7 +142,19 @@ public class ServiceMethodProcessor extends AbstractProcessor {
                 ExecutableType substitutedType = (ExecutableType) typeUtils.asMemberOf(controllerType,
                         annotatedMethod);
 
-                Optional<ExecutableElement> matchingMethod = findMatchingMethod(substitutedType,
+                if (serviceMethodAnnotation.batchSupported()) {
+                    Optional<ControllerImplGenerator.ResolvedMethod> resolvedBatch = resolveBatchServiceMethod(
+                            typeUtils, elementUtils, controllerInterface, controllerType, annotatedMethod,
+                            substitutedType, targetServiceClassMirror, targetMethodName, diagnosticAnchor);
+                    if (resolvedBatch.isEmpty()) {
+                        allResolved = false;
+                        continue;
+                    }
+                    resolvedMethods.add(resolvedBatch.get());
+                    continue;
+                }
+
+                Optional<ExecutableElement> matchingMethod = findMatchingMethod(substitutedType.getParameterTypes(),
                         targetServiceClassMirror, targetMethodName);
 
                 if (matchingMethod.isEmpty()) {
@@ -150,7 +170,7 @@ public class ServiceMethodProcessor extends AbstractProcessor {
                 checkReturnTypeCompatible(diagnosticAnchor, substitutedType.getReturnType(), matchingMethod.get(),
                         targetMethodName, targetServiceClassMirror);
                 resolvedMethods.add(new ControllerImplGenerator.ResolvedMethod(annotatedMethod, substitutedType,
-                        matchingMethod.get()));
+                        matchingMethod.get(), null));
             }
 
             if (allResolved) {
@@ -159,6 +179,101 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         }
 
         validateNoOrphanedServiceMethods(roundEnv);
+    }
+
+    /**
+     * A {@code @ServiceMethod(batchSupported = true)} method's own parameter is
+     * a JsonNode (sniffed for single-vs-array at runtime), so - unlike the
+     * ordinary path above - there is no type variable left on the method
+     * itself to recover T/ID from. Instead, T/ID come from the parameterized
+     * declaration of whichever generic {@code <T, ID>} interface actually
+     * declared this method (e.g. {@code StandardBatchRestRepository<Product,
+     * Long>}), found the same way the repository side finds {@code
+     * StandardRepository<T, ID>}. With T/ID in hand, this builds the
+     * single-item and batch-item expected parameter shapes directly (there is
+     * no source declaration left to run {@code asMemberOf} against) and
+     * resolves both as two overloads of the same name on the service class.
+     */
+    private Optional<ControllerImplGenerator.ResolvedMethod> resolveBatchServiceMethod(Types typeUtils,
+            Elements elementUtils, TypeElement controllerInterface, DeclaredType controllerType,
+            ExecutableElement annotatedMethod, ExecutableType substitutedType, TypeMirror targetServiceClassMirror,
+            String targetMethodName, Element diagnosticAnchor) {
+        TypeElement declaringInterface = (TypeElement) annotatedMethod.getEnclosingElement();
+        DeclaredType batchBaseType = declaringInterface.equals(controllerInterface) ? controllerType
+                : findSupertypeDeclaration(typeUtils, controllerType, declaringInterface);
+
+        if (batchBaseType == null || batchBaseType.getTypeArguments().size() != 2) {
+            error(diagnosticAnchor, "Could not resolve %s<T, ID> type arguments for batch method '%s' on '%s'",
+                    declaringInterface.getSimpleName(), targetMethodName, controllerInterface.getSimpleName());
+            return Optional.empty();
+        }
+
+        TypeMirror entityType = batchBaseType.getTypeArguments().get(0);
+        TypeMirror idType = batchBaseType.getTypeArguments().get(1);
+
+        TypeElement mapElement = elementUtils.getTypeElement("java.util.Map");
+        TypeElement objectElement = elementUtils.getTypeElement("java.lang.Object");
+        TypeElement stringElement = elementUtils.getTypeElement("java.lang.String");
+        TypeElement listElement = elementUtils.getTypeElement("java.util.List");
+        TypeElement batchPatchItemElement = elementUtils
+                .getTypeElement("io.github.gergilcan.wirej.core.BatchPatchItem");
+        if (mapElement == null || objectElement == null || stringElement == null || listElement == null
+                || batchPatchItemElement == null) {
+            error(diagnosticAnchor, "Could not resolve JDK/BatchPatchItem types needed for batch method '%s'",
+                    targetMethodName);
+            return Optional.empty();
+        }
+
+        TypeMirror mapOfStringObject = typeUtils.getDeclaredType(mapElement, stringElement.asType(),
+                objectElement.asType());
+        TypeMirror batchPatchItemOfId = typeUtils.getDeclaredType(batchPatchItemElement, idType);
+        TypeMirror listOfBatchPatchItem = typeUtils.getDeclaredType(listElement, batchPatchItemOfId);
+        TypeMirror entityArrayType = typeUtils.getArrayType(entityType);
+
+        List<List<TypeMirror>> singleShapes = List.of(
+                List.of(entityType),
+                List.of(idType, mapOfStringObject));
+        List<List<TypeMirror>> batchShapes = List.of(
+                List.of(entityArrayType),
+                List.of(listOfBatchPatchItem));
+
+        Optional<ExecutableElement> singleMatch = findFirstMatchingShape(singleShapes, targetServiceClassMirror,
+                targetMethodName);
+        Optional<ExecutableElement> batchMatch = findFirstMatchingShape(batchShapes, targetServiceClassMirror,
+                targetMethodName);
+
+        if (singleMatch.isEmpty()) {
+            error(diagnosticAnchor,
+                    "Batch method '%s' requires a single-item overload ('%s(%s)' or '%s(%s, %s)') in class %s",
+                    targetMethodName, targetMethodName, entityType, targetMethodName, idType, mapOfStringObject,
+                    targetServiceClassMirror.toString());
+            return Optional.empty();
+        }
+        if (batchMatch.isEmpty()) {
+            error(diagnosticAnchor, "Batch method '%s' requires a batch overload ('%s(%s)' or '%s(%s)') in class %s",
+                    targetMethodName, targetMethodName, entityArrayType, targetMethodName, listOfBatchPatchItem,
+                    targetServiceClassMirror.toString());
+            return Optional.empty();
+        }
+
+        checkReturnTypeCompatible(diagnosticAnchor, substitutedType.getReturnType(), singleMatch.get(),
+                targetMethodName, targetServiceClassMirror);
+        checkReturnTypeCompatible(diagnosticAnchor, substitutedType.getReturnType(), batchMatch.get(),
+                targetMethodName, targetServiceClassMirror);
+
+        return Optional.of(new ControllerImplGenerator.ResolvedMethod(annotatedMethod, substitutedType,
+                singleMatch.get(), batchMatch.get()));
+    }
+
+    private Optional<ExecutableElement> findFirstMatchingShape(List<List<TypeMirror>> candidateShapes,
+            TypeMirror targetClass, String methodName) {
+        for (List<TypeMirror> shape : candidateShapes) {
+            Optional<ExecutableElement> match = findMatchingMethod(shape, targetClass, methodName);
+            if (match.isPresent()) {
+                return match;
+            }
+        }
+        return Optional.empty();
     }
 
     /**
@@ -182,23 +297,38 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         }
     }
 
-    private void processQueryFileAnnotations(RoundEnvironment roundEnv) {
+    /**
+     * Handles both kinds of repository content in a single pass per interface:
+     * the interface's own @QueryFile methods, and StandardRepository CRUD
+     * methods inherited from the generic base. They must be gathered together
+     * because the Filer only allows writing a given generated source file once
+     * per compilation - two independent sweeps would both try to write the
+     * same <Interface>Impl for an interface that mixes the two styles.
+     */
+    private void processRepositoryAnnotations(RoundEnvironment roundEnv) {
         Set<? extends Element> annotatedElements = roundEnv.getElementsAnnotatedWith(QueryFile.class);
 
         messager.printMessage(Diagnostic.Kind.NOTE,
                 "Found " + annotatedElements.size() + " elements annotated with @QueryFile in this round.");
 
-        Map<TypeElement, List<ExecutableElement>> methodsByInterface = annotatedElements.stream()
+        Map<TypeElement, List<ExecutableElement>> queryFileMethodsByInterface = annotatedElements.stream()
                 .filter(element -> element.getKind() == ElementKind.METHOD)
                 .map(ExecutableElement.class::cast)
                 .collect(Collectors.groupingBy(method -> (TypeElement) method.getEnclosingElement()));
 
-        for (var entry : methodsByInterface.entrySet()) {
-            TypeElement repositoryInterface = entry.getKey();
-            List<ExecutableElement> methods = entry.getValue();
+        Map<TypeElement, RepositoryImplGenerator.StandardCrud> standardCrudByInterface = findStandardCrudInterfaces(
+                roundEnv);
+
+        Set<TypeElement> repositoryInterfaces = new LinkedHashSet<>();
+        repositoryInterfaces.addAll(queryFileMethodsByInterface.keySet());
+        repositoryInterfaces.addAll(standardCrudByInterface.keySet());
+
+        for (TypeElement repositoryInterface : repositoryInterfaces) {
+            List<ExecutableElement> queryFileMethods = queryFileMethodsByInterface.getOrDefault(repositoryInterface,
+                    List.of());
             boolean allValid = true;
 
-            for (ExecutableElement annotatedMethod : methods) {
+            for (ExecutableElement annotatedMethod : queryFileMethods) {
                 QueryFile queryFileAnnotation = annotatedMethod.getAnnotation(QueryFile.class);
                 String queryFilePath = queryFileAnnotation.value();
                 if (queryFilePath == null || queryFilePath.trim().isEmpty()) {
@@ -214,9 +344,125 @@ public class ServiceMethodProcessor extends AbstractProcessor {
             }
 
             if (allValid) {
-                repositoryImplGenerator.generate(repositoryInterface, methods);
+                repositoryImplGenerator.generate(repositoryInterface, queryFileMethods,
+                        standardCrudByInterface.get(repositoryInterface));
             }
         }
+    }
+
+    private static final String SPRING_REPOSITORY = "org.springframework.stereotype.Repository";
+
+    private Map<TypeElement, RepositoryImplGenerator.StandardCrud> findStandardCrudInterfaces(
+            RoundEnvironment roundEnv) {
+        Map<TypeElement, RepositoryImplGenerator.StandardCrud> result = new LinkedHashMap<>();
+        // String-based lookup so the processor doesn't need a compile dependency on
+        // spring-context just to reference the marker annotation type.
+        TypeElement repositoryMarker = processingEnv.getElementUtils().getTypeElement(SPRING_REPOSITORY);
+        if (repositoryMarker == null) {
+            return result;
+        }
+
+        Types typeUtils = processingEnv.getTypeUtils();
+        Elements elementUtils = processingEnv.getElementUtils();
+
+        for (Element element : roundEnv.getElementsAnnotatedWith(repositoryMarker)) {
+            if (element.getKind() != ElementKind.INTERFACE) {
+                continue;
+            }
+            TypeElement repositoryInterface = (TypeElement) element;
+
+            List<ExecutableElement> standardMethods = elementUtils.getAllMembers(repositoryInterface).stream()
+                    .filter(member -> member.getKind() == ElementKind.METHOD)
+                    .map(ExecutableElement.class::cast)
+                    .filter(method -> method.getAnnotation(StandardOperation.class) != null)
+                    .toList();
+            if (standardMethods.isEmpty()) {
+                continue;
+            }
+
+            if (!repositoryInterface.getTypeParameters().isEmpty()) {
+                error(repositoryInterface,
+                        "@Repository interfaces extending StandardRepository must not declare their own type parameters: '%s'",
+                        repositoryInterface.getSimpleName());
+                continue;
+            }
+
+            TypeElement declaringInterface = (TypeElement) standardMethods.get(0).getEnclosingElement();
+            DeclaredType interfaceType = (DeclaredType) repositoryInterface.asType();
+            DeclaredType standardBaseType = findSupertypeDeclaration(typeUtils, interfaceType, declaringInterface);
+            if (standardBaseType == null || standardBaseType.getTypeArguments().size() != 2) {
+                error(repositoryInterface,
+                        "Could not resolve %s<T, ID> type arguments for '%s'",
+                        declaringInterface.getSimpleName(), repositoryInterface.getSimpleName());
+                continue;
+            }
+
+            TypeMirror entityType = standardBaseType.getTypeArguments().get(0);
+            TypeMirror idType = standardBaseType.getTypeArguments().get(1);
+            Element entityElement = typeUtils.asElement(entityType);
+            if (!(entityElement instanceof TypeElement entityTypeElement)) {
+                error(repositoryInterface, "Could not resolve entity type %s for %s",
+                        entityType.toString(), declaringInterface.getSimpleName());
+                continue;
+            }
+
+            Optional<String> tableName = ProcessorSupport.findTableName(entityTypeElement, elementUtils);
+            if (tableName.isEmpty()) {
+                error(repositoryInterface,
+                        "Entity %s used with %s must declare its table via @WireJTable(\"table_name\") "
+                                + "or jakarta.persistence.Table(name = \"table_name\")",
+                        entityType.toString(), declaringInterface.getSimpleName());
+                continue;
+            }
+
+            Optional<VariableElement> pkField = ProcessorSupport.findPrimaryKeyField(entityTypeElement);
+            if (pkField.isEmpty()) {
+                error(repositoryInterface,
+                        "Entity %s used with %s needs a primary key field - annotate one with "
+                                + "@WireJId or jakarta.persistence.Id, or name it 'id'",
+                        entityType.toString(), declaringInterface.getSimpleName());
+                continue;
+            }
+            String pkFieldName = pkField.get().getSimpleName().toString();
+            String pkColumn = ProcessorSupport.resolveParameterName(pkField.get(), pkFieldName, elementUtils);
+
+            List<RepositoryImplGenerator.StandardMethod> resolvedMethods = new ArrayList<>();
+            for (ExecutableElement standardMethod : standardMethods) {
+                ExecutableType substitutedType = (ExecutableType) typeUtils.asMemberOf(interfaceType, standardMethod);
+                resolvedMethods.add(new RepositoryImplGenerator.StandardMethod(standardMethod, substitutedType,
+                        standardMethod.getAnnotation(StandardOperation.class).value()));
+            }
+
+            result.put(repositoryInterface, new RepositoryImplGenerator.StandardCrud(entityType, idType,
+                    tableName.get(), pkFieldName, pkColumn, resolvedMethods));
+        }
+        return result;
+    }
+
+    /**
+     * Walks the supertype chain of {@code type} looking for the declared,
+     * parameterized form of {@code target} (e.g. finds
+     * {@code StandardRepository<Product, Long>} when {@code type} is
+     * {@code ProductRepository} and {@code target} is
+     * {@code StandardRepository}) - not tied to any specific base interface, so
+     * any generic {@code <T, ID>} interface whose methods carry
+     * {@code @StandardOperation} can supply its own CRUD surface this way.
+     */
+    private DeclaredType findSupertypeDeclaration(Types typeUtils, DeclaredType type, TypeElement target) {
+        for (TypeMirror supertype : typeUtils.directSupertypes(type)) {
+            if (supertype.getKind() != TypeKind.DECLARED) {
+                continue;
+            }
+            DeclaredType declared = (DeclaredType) supertype;
+            if (declared.asElement().equals(target)) {
+                return declared;
+            }
+            DeclaredType nested = findSupertypeDeclaration(typeUtils, declared, target);
+            if (nested != null) {
+                return nested;
+            }
+        }
+        return null;
     }
 
     private static final List<String> SOURCE_RESOURCE_ROOTS = List.of("src/main/resources", "src/test/resources");
@@ -321,12 +567,10 @@ public class ServiceMethodProcessor extends AbstractProcessor {
         }
     }
 
-    private Optional<ExecutableElement> findMatchingMethod(ExecutableType sourceMethodType, TypeMirror targetClass,
-            String methodName) {
+    private Optional<ExecutableElement> findMatchingMethod(List<? extends TypeMirror> sourceParamTypes,
+            TypeMirror targetClass, String methodName) {
         TypeElement targetClassElement = (TypeElement) processingEnv.getTypeUtils().asElement(targetClass);
         Types typeUtils = processingEnv.getTypeUtils();
-
-        List<? extends TypeMirror> sourceParamTypes = sourceMethodType.getParameterTypes();
 
         return targetClassElement.getEnclosedElements().stream()
                 .filter(element -> element.getKind() == ElementKind.METHOD)

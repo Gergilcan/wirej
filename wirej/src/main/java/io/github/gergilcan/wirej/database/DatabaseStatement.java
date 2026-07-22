@@ -57,7 +57,34 @@ public class DatabaseStatement<T> {
       Class<?> entityClass, RsqlParser parser, ConnectionHandler connectionHandler) throws IOException, SQLException {
     this.entityClass = entityClass;
     loadQueryFile(fileName);
+    applyRequestOptions(filters, pagination, parser);
+    openConnection(connectionHandler);
+  }
 
+  private DatabaseStatement() {
+  }
+
+  /**
+   * Creates a statement from literal query text instead of a classpath .sql
+   * file - the entry point for compile-time-generated SQL (StandardRepository
+   * operations), where the query is baked into the generated source as a
+   * string and there is no file to load. {@code queryName} is used purely for
+   * logging and error messages, taking the place a file name has elsewhere.
+   */
+  public static <T> DatabaseStatement<T> forGeneratedQuery(String queryText, String queryName,
+      RequestFilters filters, RequestPagination pagination, Class<?> entityClass, RsqlParser parser,
+      ConnectionHandler connectionHandler) {
+    DatabaseStatement<T> statement = new DatabaseStatement<>();
+    statement.entityClass = entityClass;
+    statement.fileName = queryName;
+    statement.startTime = System.currentTimeMillis();
+    statement.originalQuery = queryText;
+    statement.applyRequestOptions(filters, pagination, parser);
+    statement.openConnection(connectionHandler);
+    return statement;
+  }
+
+  private void applyRequestOptions(RequestFilters filters, RequestPagination pagination, RsqlParser parser) {
     if (pagination != null) {
       setParameter("initialPosition", pagination.getPageNumber() * pagination.getPageSize());
       setParameter("pageSize", pagination.getPageSize());
@@ -76,8 +103,6 @@ public class DatabaseStatement<T> {
               ? parser.parseSorting(filters.getSort(), entityClass)
               : "");
     }
-
-    openConnection(connectionHandler);
   }
 
   private static final ConcurrentHashMap<String, String> QUERY_FILE_CACHE = new ConcurrentHashMap<>();

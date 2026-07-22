@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.github.gergilcan.wirej.entities.Product;
 import io.github.gergilcan.wirej.entities.User;
 
 /**
@@ -64,6 +65,41 @@ class StandardRestRepositoryTest {
                 .andExpect(jsonPath("$.name").value("Patched User"));
 
         mockMvc.perform(delete("/users-generic/901"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void pagedControllerGetAllReturnsDataAndTotalCountInOneResponseBody() throws Exception {
+        Product product = new Product();
+        product.setId(2901L);
+        product.setName("Paged HTTP Product");
+
+        mockMvc.perform(post("/products-paged/")
+                .contentType("application/json")
+                .content(objectMapper.writeValueAsString(product)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(2901));
+
+        mockMvc.perform(get("/products-paged/2901"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Paged HTTP Product"));
+
+        mockMvc.perform(get("/products-paged/")
+                .param("filters", "id==2901")
+                .param("pageNumber", "0")
+                .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(1))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].id").value(2901));
+
+        mockMvc.perform(patch("/products-paged/2901")
+                .contentType("application/json")
+                .content("{\"name\":\"Patched Paged Product\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Patched Paged Product"));
+
+        mockMvc.perform(delete("/products-paged/2901"))
                 .andExpect(status().isNoContent());
     }
 }

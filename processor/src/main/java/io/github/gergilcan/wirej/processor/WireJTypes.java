@@ -22,9 +22,15 @@ final class WireJTypes {
     static final ClassName PARAMETER_BINDER = ClassName.get("io.github.gergilcan.wirej.database", "ParameterBinder");
     static final ClassName RSQL_PARSER = ClassName.get("io.github.gergilcan.wirej.rsql", "RsqlParser");
     static final ClassName WIREJ_EXCEPTION = ClassName.get("io.github.gergilcan.wirej.exceptions", "WireJException");
+    static final ClassName PAGED_RESULT = ClassName.get("io.github.gergilcan.wirej.core", "PagedResult");
+    static final ClassName BATCH_PATCH_ITEM = ClassName.get("io.github.gergilcan.wirej.core", "BatchPatchItem");
 
     static final ClassName RESPONSE_ENTITY = ClassName.get("org.springframework.http", "ResponseEntity");
     static final ClassName HTTP_STATUS = ClassName.get("org.springframework.http", "HttpStatus");
+    static final ClassName JSON_NODE = ClassName.get("com.fasterxml.jackson.databind", "JsonNode");
+    static final ClassName OBJECT_MAPPER = ClassName.get("com.fasterxml.jackson.databind", "ObjectMapper");
+    static final ClassName JSON_PROCESSING_EXCEPTION = ClassName.get("com.fasterxml.jackson.core",
+            "JsonProcessingException");
 
     static final ClassName IO_EXCEPTION = ClassName.get(IOException.class);
     static final ClassName SQL_EXCEPTION = ClassName.get(SQLException.class);
