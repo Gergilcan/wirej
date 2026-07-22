@@ -221,8 +221,12 @@ public class DatabaseStatement<T> {
   private void setStatementParameters(PreparedStatement statement) throws SQLException {
     for (int i = 0; i < statementParameters.size(); i++) {
       var parameterName = statementParameters.get(i);
-      statement.setObject(i + 1, parameters.get(parameterName));
+      statement.setObject(i + 1, toJdbcValue(parameters.get(parameterName)));
     }
+  }
+
+  private static Object toJdbcValue(Object value) {
+    return value instanceof Enum<?> enumValue ? enumValue.name() : value;
   }
 
   public T getSingleValue() throws SQLException {
