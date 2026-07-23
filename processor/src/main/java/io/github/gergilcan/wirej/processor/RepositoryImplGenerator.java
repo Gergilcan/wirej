@@ -245,18 +245,18 @@ final class RepositoryImplGenerator {
     private CodeBlock buildGetAllBody(List<? extends VariableElement> parameters, StandardCrud crud,
             String methodName) {
         String filtersParam = parameters.get(0).getSimpleName().toString();
-        String paginationParam = parameters.get(1).getSimpleName().toString();
         TypeName entityName = TypeName.get(crud.entityType());
-        String sql = "SELECT * FROM " + crud.tableName()
-                + " :filters :sorting OFFSET :initialPosition ROWS FETCH NEXT :pageSize ROWS ONLY";
+        // Plain getAll is unpaginated - pagination lives on PagedRepository.getAll
+        // (GET_PAGE). No OFFSET/FETCH clause, and null pagination passed through.
+        String sql = "SELECT * FROM " + crud.tableName() + " :filters :sorting";
 
         CodeBlock.Builder body = CodeBlock.builder();
         body.addStatement("$T stmt = null",
                 ParameterizedTypeName.get(WireJTypes.DATABASE_STATEMENT, entityName));
         body.beginControlFlow("try");
-        body.addStatement("stmt = $T.forGeneratedQuery($S, $S, $L, $L, $T.class, this.rsqlParser, "
+        body.addStatement("stmt = $T.forGeneratedQuery($S, $S, $L, null, $T.class, this.rsqlParser, "
                 + "this.connectionHandler)", WireJTypes.DATABASE_STATEMENT, sql, queryName(crud, methodName),
-                filtersParam, paginationParam, entityName);
+                filtersParam, entityName);
         body.addStatement("return stmt.getResultList()");
         addStandardCatches(body, crud, methodName);
         return body.build();

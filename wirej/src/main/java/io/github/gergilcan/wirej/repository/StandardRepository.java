@@ -8,7 +8,6 @@ import io.github.gergilcan.wirej.annotations.StandardOperationType;
 import io.github.gergilcan.wirej.core.BatchPatchItem;
 import io.github.gergilcan.wirej.core.PagedResult;
 import io.github.gergilcan.wirej.core.RequestFilters;
-import io.github.gergilcan.wirej.core.RequestPagination;
 
 /**
  * A standard CRUD repository surface a {@code @Repository} interface can
@@ -50,13 +49,10 @@ public interface StandardRepository<T, ID> {
   T get(ID id);
 
   @StandardOperation(StandardOperationType.GET_ALL)
-  T[] getAll(RequestFilters filters, RequestPagination pagination);
+  T[] getAll(RequestFilters filters);
 
   @StandardOperation(StandardOperationType.COUNT)
   Long count(RequestFilters filters);
-
-  @StandardOperation(StandardOperationType.GET_PAGE)
-  PagedResult<T> getPage(RequestFilters filters, RequestPagination pagination);
 
   @StandardOperation(StandardOperationType.CREATE)
   T create(T entity);

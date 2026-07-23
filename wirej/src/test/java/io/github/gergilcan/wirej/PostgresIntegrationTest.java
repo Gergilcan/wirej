@@ -26,7 +26,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.github.gergilcan.wirej.core.PagedResult;
 import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
 import io.github.gergilcan.wirej.entities.Invoice;
@@ -148,23 +147,6 @@ class PostgresIntegrationTest {
             assertThrows(WireJException.class,
                     () -> invoiceRepository.update(3201L, Map.of("invoice_number", 9L)));
         }
-
-        @Test
-        void countAndGetPageWorkWithACustomPrimaryKeyColumnToo() {
-            invoiceRepository.create(newInvoice(3301L, "Invoice A"));
-            invoiceRepository.create(newInvoice(3302L, "Invoice B"));
-            invoiceRepository.create(newInvoice(3303L, "Invoice C"));
-
-            RequestFilters activeFilters = filters("invoiceNumber>=3301;invoiceNumber<=3303", "invoiceNumber==ASC");
-
-            Long total = invoiceRepository.count(activeFilters);
-            assertThat(total).isEqualTo(3L);
-
-            PagedResult<Invoice> page = invoiceRepository.getPage(activeFilters, new RequestPagination(0, 2));
-            assertThat(page.getTotalCount()).isEqualTo(3L);
-            assertThat(Arrays.stream(page.getData()).map(Invoice::getInvoiceNumber))
-                    .containsExactly(3301L, 3302L);
-        }
     }
 
     @Nested
@@ -182,8 +164,7 @@ class PostgresIntegrationTest {
         private Product[] query(String filterExpression) {
             seed();
             return productRepository.getAll(
-                    filters("(" + filterExpression + ");id>=4001;id<=4004", "id==ASC"),
-                    new RequestPagination(0, 100));
+                    filters("(" + filterExpression + ");id>=4001;id<=4004", "id==ASC"));
         }
 
         @Test
@@ -249,8 +230,7 @@ class PostgresIntegrationTest {
         void malformedFilterThrowsInsteadOfSilentlyDropping() {
             seed();
             WireJException ex = assertThrows(WireJException.class,
-                    () -> productRepository.getAll(filters("name~~~bogus~~~", "id==ASC"),
-                            new RequestPagination(0, 10)));
+                    () -> productRepository.getAll(filters("name~~~bogus~~~", "id==ASC")));
             assertThat(ex.getMessage()).contains("Unrecognized filter clause");
         }
     }
@@ -267,53 +247,24 @@ class PostgresIntegrationTest {
             }
         }
 
-        private Product[] page(String sort, int pageNumber, int pageSize) {
+        private Product[] sorted(String sort) {
             seed();
-            return productRepository.getAll(filters("id>=5001;id<=5004", sort),
-                    new RequestPagination(pageNumber, pageSize));
+            return productRepository.getAll(filters("id>=5001;id<=5004", sort));
         }
 
         @Test
         void ascendingAndDescendingSort() {
-            Product[] asc = page("id==ASC", 0, 100);
+            Product[] asc = sorted("id==ASC");
             assertThat(Arrays.stream(asc).map(Product::getId)).containsExactly(5001L, 5002L, 5003L, 5004L);
 
-            Product[] desc = page("id==DESC", 0, 100);
+            Product[] desc = sorted("id==DESC");
             assertThat(Arrays.stream(desc).map(Product::getId)).containsExactly(5004L, 5003L, 5002L, 5001L);
         }
 
         @Test
         void multipleSortClausesApplyInOrder() {
-            Product[] result = page("name==ASC;id==DESC", 0, 100);
+            Product[] result = sorted("name==ASC;id==DESC");
             assertThat(Arrays.stream(result).map(Product::getId)).containsExactly(5004L, 5002L, 5003L, 5001L);
-        }
-
-        @Test
-        void paginationLimitsPageSizeAndAdvancesOffset() {
-            Product[] firstPage = page("id==ASC", 0, 2);
-            assertThat(Arrays.stream(firstPage).map(Product::getId)).containsExactly(5001L, 5002L);
-
-            Product[] secondPage = page("id==ASC", 1, 2);
-            assertThat(Arrays.stream(secondPage).map(Product::getId)).containsExactly(5003L, 5004L);
-
-            Product[] beyond = page("id==ASC", 5, 2);
-            assertThat(beyond).isEmpty();
-        }
-
-        @Test
-        void filtersSortingAndPaginationCombined() {
-            seed();
-            // name!=Cherry keeps Apple(5002), Banana(5003), Apple(5004); sorted by
-            // name then id that's 5002, 5004, 5003 - split across two pages.
-            Product[] result = productRepository.getAll(
-                    filters("id>=5001;id<=5004;name!=Cherry", "name==ASC;id==ASC"),
-                    new RequestPagination(0, 2));
-            assertThat(Arrays.stream(result).map(Product::getId)).containsExactly(5002L, 5004L);
-
-            Product[] secondPage = productRepository.getAll(
-                    filters("id>=5001;id<=5004;name!=Cherry", "name==ASC;id==ASC"),
-                    new RequestPagination(1, 2));
-            assertThat(Arrays.stream(secondPage).map(Product::getId)).containsExactly(5003L);
         }
 
         @Test
@@ -324,20 +275,6 @@ class PostgresIntegrationTest {
 
             Long filtered = productRepository.count(filters("id>=5001;id<=5004;name==Apple", "id==ASC"));
             assertThat(filtered).isEqualTo(2L);
-        }
-
-        @Test
-        void getPageCombinesPagedDataWithTheUnpaginatedTotalCount() {
-            seed();
-            RequestFilters activeFilters = filters("id>=5001;id<=5004", "id==ASC");
-
-            PagedResult<Product> firstPage = productRepository.getPage(activeFilters, new RequestPagination(0, 2));
-            assertThat(firstPage.getTotalCount()).isEqualTo(4L);
-            assertThat(Arrays.stream(firstPage.getData()).map(Product::getId)).containsExactly(5001L, 5002L);
-
-            PagedResult<Product> secondPage = productRepository.getPage(activeFilters, new RequestPagination(1, 2));
-            assertThat(secondPage.getTotalCount()).isEqualTo(4L);
-            assertThat(Arrays.stream(secondPage.getData()).map(Product::getId)).containsExactly(5003L, 5004L);
         }
     }
 

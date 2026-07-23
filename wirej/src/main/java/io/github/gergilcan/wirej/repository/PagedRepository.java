@@ -1,11 +1,7 @@
 package io.github.gergilcan.wirej.repository;
 
-import java.util.List;
-import java.util.Map;
-
 import io.github.gergilcan.wirej.annotations.StandardOperation;
 import io.github.gergilcan.wirej.annotations.StandardOperationType;
-import io.github.gergilcan.wirej.core.BatchPatchItem;
 import io.github.gergilcan.wirej.core.PagedResult;
 import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
@@ -25,25 +21,7 @@ import io.github.gergilcan.wirej.core.RequestPagination;
  * {@code createBatch}/{@code updateBatch} batching behavior, all identical
  * here.
  */
-public interface PagedRepository<T, ID> {
-  @StandardOperation(StandardOperationType.GET)
-  T get(ID id);
-
+public interface PagedRepository<T, ID> extends StandardRepository<T, ID> {
   @StandardOperation(StandardOperationType.GET_PAGE)
   PagedResult<T> getAll(RequestFilters filters, RequestPagination pagination);
-
-  @StandardOperation(StandardOperationType.CREATE)
-  T create(T entity);
-
-  @StandardOperation(StandardOperationType.CREATE_BATCH)
-  T[] createBatch(T[] entities);
-
-  @StandardOperation(StandardOperationType.UPDATE)
-  T update(ID id, Map<String, Object> changes);
-
-  @StandardOperation(StandardOperationType.UPDATE_BATCH)
-  T[] updateBatch(List<BatchPatchItem<ID>> items);
-
-  @StandardOperation(StandardOperationType.DELETE)
-  void delete(ID id);
 }

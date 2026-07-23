@@ -66,8 +66,7 @@ class StandardRepositoryTest {
         Product updated = productRepository.update(1001L, Map.of("name", "Updated Widget"));
         assertThat(updated.getName()).isEqualTo("Updated Widget");
 
-        Product[] all = productRepository.getAll(new RequestFilters(null, null, "id==DESC"),
-                new RequestPagination(0, 10));
+        Product[] all = productRepository.getAll(new RequestFilters(null, null, "id==DESC"));
         assertThat(all).isNotEmpty();
 
         productRepository.delete(1001L);
@@ -80,15 +79,12 @@ class StandardRepositoryTest {
         productRepository.create(newProduct(1102L, "Beta"));
         productRepository.create(newProduct(1103L, "Gamma"));
 
-        Product[] filtered = productRepository.getAll(new RequestFilters("name==Beta", null, "id==DESC"),
-                new RequestPagination(0, 10));
+        Product[] filtered = productRepository.getAll(new RequestFilters("name==Beta", null, "id==DESC"));
         assertThat(filtered).hasSize(1);
         assertThat(filtered[0].getName()).isEqualTo("Beta");
 
-        Product[] page = productRepository.getAll(new RequestFilters(null, null, "id==DESC"),
-                new RequestPagination(0, 2));
-        assertThat(page).hasSize(2);
-        assertThat(page[0].getId()).isGreaterThan(page[1].getId());
+        Product[] page = productRepository.getAll(new RequestFilters(null, null, "id==DESC"));
+        assertThat(page).hasSize(3);
     }
 
     @Test
@@ -167,19 +163,19 @@ class StandardRepositoryTest {
 
     @Test
     void getPageReturnsThePageOfDataAlongsideTheUnpaginatedTotalCount() {
-        productRepository.create(newProduct(1601L, "Paged"));
-        productRepository.create(newProduct(1602L, "Paged"));
-        productRepository.create(newProduct(1603L, "Paged"));
-        productRepository.create(newProduct(1604L, "Paged"));
-        productRepository.create(newProduct(1605L, "Not Paged"));
+        pagedProductRepository.create(newProduct(1601L, "Paged"));
+        pagedProductRepository.create(newProduct(1602L, "Paged"));
+        pagedProductRepository.create(newProduct(1603L, "Paged"));
+        pagedProductRepository.create(newProduct(1604L, "Paged"));
+        pagedProductRepository.create(newProduct(1605L, "Not Paged"));
 
         RequestFilters filters = new RequestFilters("name==Paged;id>=1601;id<=1605", null, "id==ASC");
 
-        PagedResult<Product> firstPage = productRepository.getPage(filters, new RequestPagination(0, 2));
+        PagedResult<Product> firstPage = pagedProductRepository.getAll(filters, new RequestPagination(0, 2));
         assertThat(firstPage.getTotalCount()).isEqualTo(4L);
         assertThat(Arrays.stream(firstPage.getData()).map(Product::getId)).containsExactly(1601L, 1602L);
 
-        PagedResult<Product> secondPage = productRepository.getPage(filters, new RequestPagination(1, 2));
+        PagedResult<Product> secondPage = pagedProductRepository.getAll(filters, new RequestPagination(1, 2));
         assertThat(secondPage.getTotalCount()).isEqualTo(4L);
         assertThat(Arrays.stream(secondPage.getData()).map(Product::getId)).containsExactly(1603L, 1604L);
     }
