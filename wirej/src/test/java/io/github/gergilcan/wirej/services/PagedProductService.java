@@ -1,5 +1,6 @@
 package io.github.gergilcan.wirej.services;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +33,28 @@ public class PagedProductService {
 
     public Product[] create(Product[] entities) {
         return repository.createBatch(entities);
+    }
+
+    // Full replace (PUT): every column is written from the entity, so fields
+    // absent from the body become null - unlike patch, which only touches keys
+    // present in its changes map.
+    public Product update(Long id, Product entity) {
+        Map<String, Object> fields = new HashMap<>();
+        fields.put("name", entity.getName());
+        fields.put("price", entity.getPrice());
+        return repository.update(id, fields);
+    }
+
+    public Product update(Product entity) {
+        return update(entity.getId(), entity);
+    }
+
+    public Product[] update(Product[] entities) {
+        Product[] updated = new Product[entities.length];
+        for (int i = 0; i < entities.length; i++) {
+            updated[i] = update(entities[i].getId(), entities[i]);
+        }
+        return updated;
     }
 
     public Product patch(Long id, Map<String, Object> changes) {

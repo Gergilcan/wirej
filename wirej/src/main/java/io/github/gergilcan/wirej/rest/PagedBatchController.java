@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
@@ -17,11 +18,12 @@ import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
 
 /**
- * {@link PagedController} + {@link StandardBatchRestRepository}'s batch
- * create/patch: {@code getAll} is meant to be backed by a service method
- * returning {@code PagedResult<T>}, and {@code create}/{@code patch} accept
- * either a single JSON object or a JSON array on the same route. See both of
- * those for the rationale behind each half of this interface.
+ * {@link PagedController} + {@link StandardBatchRestController}'s batch
+ * create/update/patch: {@code getAll} is meant to be backed by a service
+ * method returning {@code PagedResult<T>}, and {@code create}/{@code update}/
+ * {@code patch} accept either a single JSON object or a JSON array on the same
+ * route. See both of those for the rationale behind each half of this
+ * interface.
  */
 public interface PagedBatchController<T, ID> {
   @GetMapping("/{id}")
@@ -38,6 +40,11 @@ public interface PagedBatchController<T, ID> {
   @ServiceMethod(batchSupported = true)
   @ResponseStatus(HttpStatus.CREATED)
   ResponseEntity<?> create(@RequestBody JsonNode body);
+
+  @PutMapping("/")
+  @ServiceMethod(batchSupported = true)
+  @ResponseStatus(HttpStatus.OK)
+  ResponseEntity<?> update(@RequestBody JsonNode body);
 
   @PatchMapping("/")
   @ServiceMethod(batchSupported = true)

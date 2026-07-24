@@ -28,6 +28,12 @@ public class CrudUserService {
         return entity;
     }
 
+    public User update(Long id, User entity) {
+        // Full replace (PUT): the path id wins over whatever the body carried.
+        entity.setId(id);
+        return entity;
+    }
+
     public User patch(Long id, Map<String, Object> changes) {
         User user = userRepository.findById(id);
         if (user != null && changes.containsKey("name")) {

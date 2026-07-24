@@ -133,7 +133,7 @@ final class ControllerImplGenerator {
 
         // Parameter NAMES/ANNOTATIONS come from the declared element, but the TYPE must come from
         // controllerMethodType - for a method inherited from a generic interface (e.g.
-        // StandardRestRepository<T, ID>), parameter.asType() would still show the raw type variable
+        // StandardRestController<T, ID>), parameter.asType() would still show the raw type variable
         // (ID), while controllerMethodType has it substituted to the concrete type (Long).
         List<? extends VariableElement> parameters = controllerMethod.getParameters();
         List<? extends TypeMirror> parameterTypes = controllerMethodType.getParameterTypes();

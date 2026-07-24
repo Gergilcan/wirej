@@ -27,7 +27,7 @@ Add WireJ to your Spring Boot project:
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej</artifactId>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
 </dependency>
 
 <!-- Required: generates the controller/repository implementation classes at compile time.
@@ -35,7 +35,7 @@ Add WireJ to your Spring Boot project:
 <dependency>
     <groupId>io.github.gergilcan</groupId>
     <artifactId>wirej-processor</artifactId>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
     <scope>provided</scope>
 </dependency>
 ```
@@ -43,8 +43,8 @@ Add WireJ to your Spring Boot project:
 ### Gradle
 
 ```gradle
-implementation 'io.github.gergilcan:wirej:1.0.5'
-annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.5'
+implementation 'io.github.gergilcan:wirej:1.0.6'
+annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.6'
 ```
 
 ### Maven Compiler Configuration (Required for Annotation Processing)
@@ -63,7 +63,7 @@ annotationProcessor 'io.github.gergilcan:wirej-processor:1.0.5'
                     <path>
                         <groupId>io.github.gergilcan</groupId>
                         <artifactId>wirej-processor</artifactId>
-                        <version>1.0.5</version>
+                        <version>1.0.6</version>
                     </path>
                 </annotationProcessorPaths>
             </configuration>

@@ -78,7 +78,7 @@ public class ServiceMethodProcessor extends AbstractProcessor {
     /**
      * Discovery is driven from @ServiceClass interfaces rather than from
      * @ServiceMethod methods, because a controller interface can inherit all of
-     * its @ServiceMethod methods from a generic base (e.g. StandardRestRepository)
+     * its @ServiceMethod methods from a generic base (e.g. StandardRestController)
      * without declaring any of its own - grouping by getEnclosingElement() would
      * never see such a controller at all. Elements.getAllMembers() walks the full
      * interface hierarchy for us, and Types.asMemberOf() resolves each inherited
@@ -187,7 +187,7 @@ public class ServiceMethodProcessor extends AbstractProcessor {
      * ordinary path above - there is no type variable left on the method
      * itself to recover T/ID from. Instead, T/ID come from the parameterized
      * declaration of whichever generic {@code <T, ID>} interface actually
-     * declared this method (e.g. {@code StandardBatchRestRepository<Product,
+     * declared this method (e.g. {@code StandardBatchRestController<Product,
      * Long>}), found the same way the repository side finds {@code
      * StandardRepository<T, ID>}. With T/ID in hand, this builds the
      * single-item and batch-item expected parameter shapes directly (there is
@@ -280,7 +280,7 @@ public class ServiceMethodProcessor extends AbstractProcessor {
      * Discovery above only visits @ServiceMethod methods reachable from an
      * @ServiceClass interface, so a method on a plain interface that forgot
      * @ServiceClass entirely would otherwise go unvalidated. Generic interfaces
-     * (like StandardRestRepository) are exempt: they're reusable bases meant to be
+     * (like StandardRestController) are exempt: they're reusable bases meant to be
      * extended, not concrete controllers, so they're never expected to carry
      * @ServiceClass themselves.
      */

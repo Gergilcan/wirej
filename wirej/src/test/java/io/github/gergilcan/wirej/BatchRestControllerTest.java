@@ -2,6 +2,7 @@ package io.github.gergilcan.wirej;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -13,12 +14,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Exercises PagedBatchController's single-object-or-array dispatch on the
- * same POST/PATCH route: the request body is sniffed at runtime, not routed
- * by a separate endpoint. Regression cases (single object) confirm the
+ * same POST/PUT/PATCH route: the request body is sniffed at runtime, not
+ * routed by a separate endpoint. Regression cases (single object) confirm the
  * existing single-item behavior still works when batch support is layered
- * on; the array cases confirm the new batch path, including a PATCH batch
+ * on; the array cases confirm the batch path, including a PATCH batch
  * with heterogeneous per-item changed fields (proving the shape-grouping,
- * not just the uniform case).
+ * not just the uniform case). PUT is the full-replace counterpart to PATCH,
+ * sharing create's array/single "shape" dispatch.
  */
 @SpringBootTest(classes = TestApplication.class)
 @AutoConfigureMockMvc
@@ -62,6 +64,39 @@ class BatchRestControllerTest {
                 .andExpect(jsonPath("$.id").value(4004))
                 .andExpect(jsonPath("$.name").value("After Patch"))
                 .andExpect(jsonPath("$.price").value(5.0));
+    }
+
+    @Test
+    void singleObjectPutFullyReplacesTheEntityIdentifiedInTheBody() throws Exception {
+        mockMvc.perform(post("/products-paged-batch/")
+                .contentType("application/json")
+                .content("{\"id\":4008,\"name\":\"Before Put\",\"price\":5.0}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(put("/products-paged-batch/")
+                .contentType("application/json")
+                .content("{\"id\":4008,\"name\":\"After Put\",\"price\":7.5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(4008))
+                .andExpect(jsonPath("$.name").value("After Put"))
+                .andExpect(jsonPath("$.price").value(7.5));
+    }
+
+    @Test
+    void arrayBodyPutReplacesEveryElementInOneBatch() throws Exception {
+        mockMvc.perform(post("/products-paged-batch/")
+                .contentType("application/json")
+                .content("[{\"id\":4009,\"name\":\"Put A\",\"price\":1.0},"
+                        + "{\"id\":4010,\"name\":\"Put B\",\"price\":2.0}]"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(put("/products-paged-batch/")
+                .contentType("application/json")
+                .content("[{\"id\":4009,\"name\":\"Put A New\",\"price\":11.0},"
+                        + "{\"id\":4010,\"name\":\"Put B New\",\"price\":22.0}]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(2));
     }
 
     @Test

@@ -7,14 +7,14 @@ import io.github.gergilcan.wirej.core.RequestFilters;
 import io.github.gergilcan.wirej.core.RequestPagination;
 
 /**
- * Same standard CRUD surface as {@link StandardRepository}, except
- * {@code getAll} always returns a {@link PagedResult} (the page of data plus
- * the unpaginated total count matching the filters) instead of a plain
- * array. Use this instead of {@code StandardRepository} when every consumer
- * of the list endpoint needs the total count (e.g. for "page X of Y" UIs);
- * use {@code StandardRepository} - with its separate {@code count}/
- * {@code getPage} - when most callers just want the array and only some need
- * the count.
+ * Extends {@link StandardRepository} with a paginated {@code getAll} overload:
+ * {@code getAll(filters, pagination)} returns a {@link PagedResult} (the page
+ * of data plus the unpaginated total count matching the filters) in a single
+ * round trip, on top of the inherited unpaginated {@code getAll(filters)} and
+ * the rest of the CRUD surface. Use this when a caller needs a page of data
+ * together with the total count (e.g. for "page X of Y" UIs); a plain
+ * {@link StandardRepository} covers the cases that only need the array, or the
+ * count alone via {@code count}.
  *
  * See {@link StandardRepository} for the table/primary-key resolution rules,
  * the {@code update} partial-update/injection-safety rules, and the

@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -20,7 +21,7 @@ import io.github.gergilcan.wirej.entities.User;
 
 /**
  * Exercises the generated implementation of an interface that inherits its
- * entire CRUD surface from StandardRestRepository<User, Long> with zero
+ * entire CRUD surface from StandardRestController<User, Long> with zero
  * methods of its own - the primary thing under test is that this compiles at
  * all (proving the annotation processor substituted real Long/User/Map
  * signatures instead of leaving dangling ID/T type variables); the HTTP
@@ -28,7 +29,7 @@ import io.github.gergilcan.wirej.entities.User;
  */
 @SpringBootTest(classes = TestApplication.class)
 @AutoConfigureMockMvc
-class StandardRestRepositoryTest {
+class StandardRestControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -57,6 +58,14 @@ class StandardRestRepositoryTest {
         mockMvc.perform(get("/users-generic/"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
+
+        // PUT is a full replace; the path id wins over whatever id the body carries.
+        mockMvc.perform(put("/users-generic/901")
+                .contentType("application/json")
+                .content("{\"id\":999,\"name\":\"Replaced User\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(901))
+                .andExpect(jsonPath("$.name").value("Replaced User"));
 
         mockMvc.perform(patch("/users-generic/901")
                 .contentType("application/json")
@@ -92,6 +101,15 @@ class StandardRestRepositoryTest {
                 .andExpect(jsonPath("$.totalCount").value(1))
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data[0].id").value(2901));
+
+        // PUT fully replaces the row (name AND price) via the service's update.
+        mockMvc.perform(put("/products-paged/2901")
+                .contentType("application/json")
+                .content("{\"name\":\"Replaced Paged Product\",\"price\":42.0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(2901))
+                .andExpect(jsonPath("$.name").value("Replaced Paged Product"))
+                .andExpect(jsonPath("$.price").value(42.0));
 
         mockMvc.perform(patch("/products-paged/2901")
                 .contentType("application/json")

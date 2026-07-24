@@ -25,10 +25,12 @@ import io.github.gergilcan.wirej.core.RequestFilters;
  * their {@code @JsonAlias}); unknown keys and the primary key itself are
  * rejected at runtime, so arbitrary strings can never reach the SQL text.
  *
- * {@code count} and {@code getPage} both apply {@code filters} the same way
- * {@code getAll} does; {@code getPage} runs the equivalent of {@code getAll}
- * and {@code count} together and returns both in one {@link PagedResult}, for
- * building "page X of Y" UIs without a second round trip.
+ * {@code count} applies {@code filters} the same way {@code getAll} does but
+ * returns the total number of matching rows instead of the rows themselves.
+ * {@code getAll} here is unpaginated (it returns every matching row); when a
+ * caller needs a page of data alongside that total count in one round trip,
+ * use {@link PagedRepository}, whose {@code getAll} takes a
+ * {@code RequestPagination} and returns a {@link PagedResult}.
  *
  * As with {@code getAll}, passing a literal {@code null} for {@code filters}
  * is not supported - pass a {@code RequestFilters} instance whose fields are
